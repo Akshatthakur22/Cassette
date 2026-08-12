@@ -18,6 +18,7 @@ interface Props {
 }
 
 export default function TapeViewClient({ tape, isPreview = false }: Props) {
+  const [hasError, setHasError] = useState(false);
   const publicId = tape.publicId;
   const [opened, setOpened] = useState(isPreview); // skip gate in preview mode
   const [side, setSide] = useState<CassetteSide>("A");
@@ -29,14 +30,28 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
   // No fake timer — progress is driven by real YT player time
   const durationRef = useRef<number>(240);
 
+  // Catch any errors
+  useEffect(() => {
+    const errorHandler = (event: ErrorEvent) => {
+      console.error("TapeViewClient error:", event.error);
+      setHasError(true);
+    };
+    window.addEventListener('error', errorHandler);
+    return () => window.removeEventListener('error', errorHandler);
+  }, []);
+
   // Record tape view on mount
   useEffect(() => {
     if (!isPreview) {
-      // Generate a session ID (using timestamp + random for uniqueness)
-      const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      recordView(tape.id, sessionId).catch(err => {
-        console.warn("Failed to record tape view:", err);
-      });
+      try {
+        // Generate a session ID (using timestamp + random for uniqueness)
+        const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        recordView(tape.id, sessionId).catch(err => {
+          console.warn("Failed to record tape view:", err);
+        });
+      } catch (err) {
+        console.error("Error in recordView:", err);
+      }
     }
   }, [tape.id, isPreview]);
 
@@ -94,6 +109,34 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     personalNote: t.personalNote ?? undefined,
     durationSec: t.durationSec ?? 240,
   }));
+
+  if (hasError) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center" style={{ background: "#060408" }}>
+        <HeroScene />
+        <div className="relative z-10 text-center px-6 max-w-md">
+          <p className="text-xl mb-4" style={{ color: "#F5F0E8", fontFamily: "'Playfair Display', Georgia, serif" }}>
+            Oops! Something went wrong
+          </p>
+          <p className="text-sm mb-6" style={{ color: "#A89880" }}>
+            There was an error loading this tape.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
+            style={{
+              background: "rgba(212,136,42,0.15)",
+              border: "1px solid rgba(212,136,42,0.3)",
+              color: "#D4882A",
+              fontFamily: "monospace",
+            }}
+          >
+            Reload page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (tracks.length === 0) {
     return (

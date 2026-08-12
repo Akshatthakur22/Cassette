@@ -65,12 +65,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function TapePage({ params }: Props) {
   try {
     const { publicId } = await params;
-    console.log(`[TapePage] Rendering page for publicId: ${publicId}`);
+    console.log(`[TapePage] Starting render for publicId: ${publicId}`);
     
     const tape = await getTapeByPublicId(publicId);
 
     if (!tape) {
-      console.log(`[TapePage] No tape returned for publicId: ${publicId}`);
+      console.log(`[TapePage] No tape found for publicId: ${publicId}`);
       return (
         <div
           className="min-h-screen flex flex-col items-center justify-center gap-4"
@@ -83,7 +83,7 @@ export default async function TapePage({ params }: Props) {
             This tape no longer exists.
           </p>
           <p className="text-sm" style={{ fontFamily: "monospace" }}>
-            It may have been deleted by the creator.
+            It may have been deleted by the creator or the link is incorrect.
           </p>
           <a
             href="/"
@@ -101,10 +101,29 @@ export default async function TapePage({ params }: Props) {
       );
     }
 
-    console.log(`[TapePage] Rendering TapeViewClient for tape: ${tape.title || 'Untitled'}`);
-    return <TapeViewClient tape={tape as any} />;
+    console.log(`[TapePage] Tape found:`, {
+      id: tape.id,
+      title: tape.title,
+      status: tape.status,
+      trackCount: tape.tracks?.length || 0
+    });
+
+    // Ensure tape object is serializable
+    const serializedTape = {
+      ...tape,
+      createdAt: tape.createdAt.toISOString(),
+      updatedAt: tape.updatedAt.toISOString(),
+      deletedAt: tape.deletedAt?.toISOString() || null,
+      tracks: tape.tracks.map(track => ({
+        ...track,
+        createdAt: track.createdAt.toISOString(),
+      }))
+    };
+
+    console.log(`[TapePage] Rendering TapeViewClient`);
+    return <TapeViewClient tape={serializedTape as any} />;
   } catch (error) {
-    console.error(`[TapePage] Error rendering page:`, error);
+    console.error(`[TapePage] Fatal error:`, error);
     return (
       <div
         className="min-h-screen flex flex-col items-center justify-center gap-4 p-6"
@@ -119,21 +138,37 @@ export default async function TapePage({ params }: Props) {
         <p className="text-sm text-center max-w-md" style={{ fontFamily: "monospace" }}>
           We couldn't load this tape. Please try refreshing the page.
         </p>
-        <p className="text-xs opacity-50 mt-2" style={{ fontFamily: "monospace" }}>
-          {error instanceof Error ? error.message : 'Unknown error'}
-        </p>
-        <a
-          href="/"
-          className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
-          style={{
-            background: "rgba(212,136,42,0.15)",
-            border: "1px solid rgba(212,136,42,0.3)",
-            color: "#D4882A",
-            fontFamily: "monospace",
-          }}
-        >
-          Go home →
-        </a>
+        {process.env.NODE_ENV === 'development' && (
+          <p className="text-xs opacity-50 mt-2 font-mono">
+            {error instanceof Error ? error.message : 'Unknown error'}
+          </p>
+        )}
+        <div className="flex gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
+            style={{
+              background: "rgba(212,136,42,0.15)",
+              border: "1px solid rgba(212,136,42,0.3)",
+              color: "#D4882A",
+              fontFamily: "monospace",
+            }}
+          >
+            Refresh
+          </button>
+          <a
+            href="/"
+            className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
+            style={{
+              background: "rgba(212,136,42,0.15)",
+              border: "1px solid rgba(212,136,42,0.3)",
+              color: "#D4882A",
+              fontFamily: "monospace",
+            }}
+          >
+            Go home →
+          </a>
+        </div>
       </div>
     );
   }
