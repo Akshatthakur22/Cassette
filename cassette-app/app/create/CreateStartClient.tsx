@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import HeroScene from "@/app/components/HeroScene";
@@ -30,18 +30,38 @@ export default function CreateStartClient() {
   const [relationship, setRelationship] = useState("other");
   const [style, setStyle] = useState("classic");
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setIsPending(true);
+    
     const fd = new FormData(e.currentTarget);
     fd.set("relationship", relationship);
     fd.set("style", style);
-    startTransition(async () => {
+    
+    try {
       const result = await createDraft(fd);
-      if (result?.error) setError(result.error);
-    });
+      if (result?.error) {
+        setError(result.error);
+        setIsPending(false);
+      }
+      // If no error and no redirect happened, something went wrong
+      if (!result?.error) {
+        setError("Something went wrong. Please try again.");
+        setIsPending(false);
+      }
+    } catch (error) {
+      // redirect() throws a NEXT_REDIRECT error - this is expected
+      // If it's not that, show an error
+      if (error && typeof error === 'object' && 'digest' in error) {
+        // This is Next.js redirect - let it propagate
+        throw error;
+      }
+      setError("Something went wrong. Please try again.");
+      setIsPending(false);
+    }
   }
 
   return (
