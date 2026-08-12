@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  directUrl         = env("DATABASE_URL_UNPOOLED")
+}
+
+model Tape {
+  id            String      @id @default(cuid())
+  publicId      String      @unique
+  draftToken    String      @unique
+  title         String?
+  dedication    String?
+  senderName    String
+  recipientName String?
+  relationship  String?     // partner | best_friend | family | memory | self | other
+  style         String      @default("classic") // classic | y2k | love | road_trip
+  visibility    String      @default("unlisted")
+  memoryDate    DateTime?
+  status        String      @default("draft")   // draft | published | deleted
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+  tracks        TapeTrack[]
+  views         TapeView[]
+  shareEvents   ShareEvent[]
+}
+
+model TapeTrack {
+  id              String   @id @default(cuid())
+  tapeId          String
+  tape            Tape     @relation(fields: [tapeId], references: [id], onDelete: Cascade)
+  side            String   // "A" | "B"
+  position        Int
+  title           String
+  artist          String?
+  thumbnailUrl    String?
+  provider        String   @default("youtube")
+  providerTrackId String
+  personalNote    String?
+  durationSec     Int?
+  createdAt       DateTime @default(now())
+
+  @@index([tapeId])
+}
+
+model ShareEvent {
+  id        String   @id @default(cuid())
+  tapeId    String
+  tape      Tape     @relation(fields: [tapeId], references: [id], onDelete: Cascade)
+  platform  String   // whatsapp | copy_link | native_share | other
+  createdAt DateTime @default(now())
+
+  @@index([tapeId])
+}
+
+model TapeView {
+  id        String   @id @default(cuid())
+  tapeId    String
+  tape      Tape     @relation(fields: [tapeId], references: [id], onDelete: Cascade)
+  sessionId String
+  createdAt DateTime @default(now())
+
+  @@index([tapeId])
+}
+
+model YoutubeSearchCache {
+  id              String   @id @default(cuid())
+  query           String   @unique // "title|artist" normalized
+  videoId         String
+  title           String
+  channelTitle    String
+  thumbnailUrl    String
+  durationSec     Int?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([expiresAt])
+}

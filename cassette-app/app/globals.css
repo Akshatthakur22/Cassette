@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* ─── CASSETTE design tokens ─── */
+@theme inline {
+  /* Fonts */
+  --font-display: var(--font-playfair);
+  --font-ui:      var(--font-inter);
+
+  /* Warm neutral chrome palette */
+  --color-cream:        #F5F0E8;
+  --color-cream-dim:    #EDE7D9;
+  --color-ink:          #1C1814;
+  --color-ink-muted:    #6B5E4E;
+  --color-ink-faint:    #A89880;
+
+  /* Scene accent colours (carried by illustrations, not chrome) */
+  --color-terracotta:   #C4503A;
+  --color-amber:        #D4882A;
+  --color-dusty-blue:   #5B7FA6;
+  --color-tape-brown:   #3D2B1F;
+  --color-tape-shell:   #2A1F14;
+
+  /* Player bar */
+  --color-bar-bg:       rgba(28, 24, 20, 0.82);
+  --color-bar-border:   rgba(245, 240, 232, 0.10);
+}
+
+/* ─── Base ─── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-cream);
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Film-grain overlay (applied via pseudo on the scene) */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  mix-blend-mode: overlay;
+  z-index: 1;
+}
+
+/* ─── Typography helpers ─── */
+.font-display { font-family: var(--font-display, 'Playfair Display', Georgia, serif); }
+.font-ui      { font-family: var(--font-ui,      'Inter',            system-ui, sans-serif); }
+
+/* ─── Reduced-motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── Scrollbar (subtle) ─── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-ink-muted); border-radius: 2px; }
