@@ -118,6 +118,12 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
         console.log('[extractVideoId] Extracted from youtube.com:', videoId);
         return videoId;
       }
+      // youtube.com/shorts/ID
+      if (url.hostname.includes('youtube.com') && url.pathname.startsWith('/shorts/')) {
+        const videoId = url.pathname.replace('/shorts/', '');
+        console.log('[extractVideoId] Extracted from youtube.com/shorts:', videoId);
+        return videoId;
+      }
       // youtu.be/ID
       if (url.hostname === 'youtu.be') {
         const videoId = url.pathname.slice(1);
