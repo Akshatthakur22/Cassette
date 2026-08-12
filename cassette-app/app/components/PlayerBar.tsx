@@ -85,6 +85,10 @@ export default function PlayerBar({
   // ── 2. Create the player once the API and the div are ready ────────────────
   const createPlayer = useCallback((videoId: string) => {
     if (playerRef.current || initPendingRef.current) return;
+    if (!videoId || videoId === 'undefined' || videoId === 'null') {
+      console.error('Invalid video ID:', videoId);
+      return;
+    }
     const el = document.getElementById(playerDivId);
     if (!el || !window.YT?.Player) return;
 
@@ -122,20 +126,23 @@ export default function PlayerBar({
 
   // ── 3. Init player when API is ready ───────────────────────────────────────
   useEffect(() => {
-    if (!ytReady || !track) return;
+    if (!ytReady || !track || !track.providerTrackId) return;
+    console.log('Initializing player with video ID:', track.providerTrackId);
     createPlayer(track.providerTrackId);
   }, [ytReady, createPlayer, track]);
 
   // ── 4. When track changes: load new video ──────────────────────────────────
   useEffect(() => {
-    if (!playerRef.current || !track) return;
+    if (!playerRef.current || !track || !track.providerTrackId) return;
     try {
+      console.log('Loading new video:', track.providerTrackId);
       if (isPlaying) {
         playerRef.current.loadVideoById(track.providerTrackId);
       } else {
         playerRef.current.cueVideoById(track.providerTrackId);
       }
     } catch (e) {
+      console.error('Error loading video:', e);
       // Player not ready yet; onReady will handle it
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

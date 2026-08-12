@@ -279,18 +279,26 @@ export async function getTapeByPublicId(publicId: string) {
       },
     });
 
+    console.log(`[getTapeByPublicId] Query completed. Tape found:`, !!tape);
+
     if (!tape) {
       console.log(`[getTapeByPublicId] No tape found with publicId: ${publicId}`);
       return null;
     }
 
-    console.log(`[getTapeByPublicId] Found tape with status: ${tape.status}, tracks: ${tape.tracks.length}`);
+    console.log(`[getTapeByPublicId] Tape details:`, {
+      id: tape.id,
+      status: tape.status,
+      trackCount: tape.tracks.length,
+      tracks: tape.tracks.map(t => ({ id: t.id, title: t.title, providerTrackId: t.providerTrackId }))
+    });
 
     if (tape.status !== "published") {
-      console.log(`[getTapeByPublicId] Tape status is "${tape.status}", not "published"`);
+      console.log(`[getTapeByPublicId] Tape status is "${tape.status}", not "published" - returning null`);
       return null;
     }
 
+    console.log(`[getTapeByPublicId] Returning published tape with ${tape.tracks.length} tracks`);
     return tape;
   } catch (error) {
     console.error(`[getTapeByPublicId] Database error:`, error);

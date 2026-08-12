@@ -105,7 +105,13 @@ export default async function TapePage({ params }: Props) {
       id: tape.id,
       title: tape.title,
       status: tape.status,
-      trackCount: tape.tracks?.length || 0
+      trackCount: tape.tracks?.length || 0,
+      tracks: tape.tracks?.map(t => ({
+        id: t.id,
+        title: t.title,
+        providerTrackId: t.providerTrackId,
+        side: t.side,
+      }))
     });
 
     // Ensure tape object is serializable
@@ -117,6 +123,18 @@ export default async function TapePage({ params }: Props) {
       tracks: tape.tracks.map(track => ({
         ...track,
         createdAt: track.createdAt.toISOString(),
+        // Ensure all fields are properly set
+        id: track.id,
+        tapeId: track.tapeId,
+        side: track.side,
+        position: track.position,
+        title: track.title,
+        artist: track.artist || null,
+        thumbnailUrl: track.thumbnailUrl || null,
+        provider: track.provider,
+        providerTrackId: track.providerTrackId,
+        personalNote: track.personalNote || null,
+        durationSec: track.durationSec || null,
       }))
     };
 
