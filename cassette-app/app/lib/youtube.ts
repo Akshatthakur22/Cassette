@@ -12,14 +12,24 @@ export interface YouTubeSearchResult {
   channelTitle: string;
   thumbnailUrl: string;
   durationSec?: number;
+  isShort?: boolean;
 }
 
 const YOUTUBE_BASE = "https://www.googleapis.com/youtube/v3";
 
 /**
+ * Check if a video duration indicates it's likely a YouTube Short
+ * Shorts are typically under 60 seconds
+ */
+function isLikelyShort(durationSec: number | undefined): boolean {
+  return durationSec !== undefined && durationSec <= 60;
+}
+
+/**
  * Search YouTube for a song by title and artist.
  * Hits cache first, then YouTube Data API.
  * Caches results for 30 days.
+ * Filters out YouTube Shorts (videos under 60 seconds) as they don't embed well.
  */
 export async function searchYouTubeTrack(
   title: string,
@@ -41,6 +51,7 @@ export async function searchYouTubeTrack(
         channelTitle: cached.channelTitle,
         thumbnailUrl: cached.thumbnailUrl,
         durationSec: cached.durationSec ?? undefined,
+        isShort: isLikelyShort(cached.durationSec ?? undefined),
       },
     ];
   }
@@ -58,10 +69,11 @@ export async function searchYouTubeTrack(
     searchUrl.searchParams.set("part", "snippet");
     searchUrl.searchParams.set("q", query);
     searchUrl.searchParams.set("type", "video");
-    searchUrl.searchParams.set("maxResults", "5");
+    searchUrl.searchParams.set("maxResults", "10"); // Increased to filter shorts
     searchUrl.searchParams.set("videoCategoryId", "10"); // Music category
     searchUrl.searchParams.set("videoEmbeddable", "true");
     searchUrl.searchParams.set("relevanceLanguage", "en");
+    searchUrl.searchParams.set("videoDuration", "medium"); // Prefer medium-length videos (4-20 min)
 
     const searchRes = await fetch(searchUrl.toString());
     if (!searchRes.ok) {
@@ -106,6 +118,12 @@ export async function searchYouTubeTrack(
         }
       }
 
+      // Skip YouTube Shorts (videos under 60 seconds)
+      if (isLikelyShort(durationSec)) {
+        console.log(`Skipping likely Short: ${snippet?.title} (${durationSec}s)`);
+        continue;
+      }
+
       const result: YouTubeSearchResult = {
         videoId,
         title: snippet?.title ?? "Unknown",
@@ -115,6 +133,7 @@ export async function searchYouTubeTrack(
           snippet?.thumbnails?.default?.url ??
           "",
         durationSec,
+        isShort: false,
       };
 
       results.push(result);
@@ -139,6 +158,9 @@ export async function searchYouTubeTrack(
           })
           .catch((e: any) => console.error("Failed to cache search result:", e));
       }
+
+      // Stop after finding 5 good results
+      if (results.length >= 5) break;
     }
 
     return results;
