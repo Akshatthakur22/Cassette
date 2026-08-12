@@ -11,6 +11,10 @@ Due to Turbopack font loader incompatibility in Next.js 16.3.0, you must set the
 - Value: `0`
 - Scope: Production, Preview (do NOT set for Development)
 
+### Prisma Setup
+
+The `postinstall` script in `package.json` automatically runs `prisma generate` after dependencies are installed. This ensures the Prisma Client is generated during Vercel builds.
+
 ### How to Set in Vercel:
 
 1. Go to your project dashboard on Vercel
