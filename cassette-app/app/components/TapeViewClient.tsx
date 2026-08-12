@@ -98,6 +98,29 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     if (firstIdx !== -1) { setCurrentIndex(firstIdx); setProgress(0); }
   }, [side, tracks]);
 
+  // Extract YouTube video ID from URL or return as-is if already an ID
+  const extractVideoId = (urlOrId: string): string => {
+    if (!urlOrId) return '';
+    // If it's already just an ID (11 characters, no special chars)
+    if (/^[a-zA-Z0-9_-]{11}$/.test(urlOrId)) return urlOrId;
+    // Extract from various YouTube URL formats
+    try {
+      const url = new URL(urlOrId);
+      // youtube.com/watch?v=ID
+      if (url.hostname.includes('youtube.com') && url.searchParams.has('v')) {
+        return url.searchParams.get('v') || '';
+      }
+      // youtu.be/ID
+      if (url.hostname === 'youtu.be') {
+        return url.pathname.slice(1);
+      }
+    } catch {
+      // Not a URL, might be just the ID
+      return urlOrId;
+    }
+    return urlOrId;
+  };
+
   const playerTracks = tracks.map(t => ({
     id: t.id,
     side: t.side as CassetteSide,
@@ -105,7 +128,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     title: t.title,
     artist: t.artist ?? "Unknown",
     thumbnailUrl: t.thumbnailUrl ?? "",
-    providerTrackId: t.providerTrackId,
+    providerTrackId: extractVideoId(t.providerTrackId), // Extract video ID from URL
     personalNote: t.personalNote ?? undefined,
     durationSec: t.durationSec ?? 240,
   }));
