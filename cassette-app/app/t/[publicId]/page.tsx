@@ -3,6 +3,10 @@ import type { Metadata } from "next";
 import { getTapeByPublicId } from "@/app/actions/tape";
 import TapeViewClient from "@/app/components/TapeViewClient";
 
+// Opt out of static optimization for this dynamic route
+export const dynamic = 'force-dynamic';
+export const revalidate = 0; // Don't cache
+
 interface Props {
   params: Promise<{ publicId: string }>;
 }
@@ -59,23 +63,64 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function TapePage({ params }: Props) {
-  const { publicId } = await params;
-  const tape = await getTapeByPublicId(publicId);
+  try {
+    const { publicId } = await params;
+    console.log(`[TapePage] Rendering page for publicId: ${publicId}`);
+    
+    const tape = await getTapeByPublicId(publicId);
 
-  if (!tape) {
+    if (!tape) {
+      console.log(`[TapePage] No tape returned for publicId: ${publicId}`);
+      return (
+        <div
+          className="min-h-screen flex flex-col items-center justify-center gap-4"
+          style={{ background: "#060408", color: "#6B5E4E" }}
+        >
+          <p
+            className="text-3xl font-bold italic"
+            style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#F5F0E8" }}
+          >
+            This tape no longer exists.
+          </p>
+          <p className="text-sm" style={{ fontFamily: "monospace" }}>
+            It may have been deleted by the creator.
+          </p>
+          <a
+            href="/"
+            className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
+            style={{
+              background: "rgba(212,136,42,0.15)",
+              border: "1px solid rgba(212,136,42,0.3)",
+              color: "#D4882A",
+              fontFamily: "monospace",
+            }}
+          >
+            Make your own tape →
+          </a>
+        </div>
+      );
+    }
+
+    console.log(`[TapePage] Rendering TapeViewClient for tape: ${tape.title || 'Untitled'}`);
+    return <TapeViewClient tape={tape as any} />;
+  } catch (error) {
+    console.error(`[TapePage] Error rendering page:`, error);
     return (
       <div
-        className="min-h-screen flex flex-col items-center justify-center gap-4"
+        className="min-h-screen flex flex-col items-center justify-center gap-4 p-6"
         style={{ background: "#060408", color: "#6B5E4E" }}
       >
         <p
           className="text-3xl font-bold italic"
           style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#F5F0E8" }}
         >
-          This tape no longer exists.
+          Something went wrong
         </p>
-        <p className="text-sm" style={{ fontFamily: "monospace" }}>
-          It may have been deleted by the creator.
+        <p className="text-sm text-center max-w-md" style={{ fontFamily: "monospace" }}>
+          We couldn't load this tape. Please try refreshing the page.
+        </p>
+        <p className="text-xs opacity-50 mt-2" style={{ fontFamily: "monospace" }}>
+          {error instanceof Error ? error.message : 'Unknown error'}
         </p>
         <a
           href="/"
@@ -87,11 +132,9 @@ export default async function TapePage({ params }: Props) {
             fontFamily: "monospace",
           }}
         >
-          Make your own tape →
+          Go home →
         </a>
       </div>
     );
   }
-
-  return <TapeViewClient tape={tape as any} />;
 }

@@ -269,15 +269,33 @@ export async function getTapeByDraftToken(draftToken: string) {
 // ─── getTapeByPublicId (for recipient view) ──────────────────────────────────
 
 export async function getTapeByPublicId(publicId: string) {
-  const tape = await prisma.tape.findUnique({
-    where: { publicId },
-    include: {
-      tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
-    },
-  });
+  try {
+    console.log(`[getTapeByPublicId] Fetching tape with publicId: ${publicId}`);
+    
+    const tape = await prisma.tape.findUnique({
+      where: { publicId },
+      include: {
+        tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
+      },
+    });
 
-  if (!tape || tape.status !== "published") return null;
-  return tape;
+    if (!tape) {
+      console.log(`[getTapeByPublicId] No tape found with publicId: ${publicId}`);
+      return null;
+    }
+
+    console.log(`[getTapeByPublicId] Found tape with status: ${tape.status}, tracks: ${tape.tracks.length}`);
+
+    if (tape.status !== "published") {
+      console.log(`[getTapeByPublicId] Tape status is "${tape.status}", not "published"`);
+      return null;
+    }
+
+    return tape;
+  } catch (error) {
+    console.error(`[getTapeByPublicId] Database error:`, error);
+    throw error;
+  }
 }
 
 // ─── recordShare ────────────────────────────────────────────────────────────
