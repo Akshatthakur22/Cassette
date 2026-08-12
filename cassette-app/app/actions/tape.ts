@@ -269,8 +269,12 @@ export async function getTapeByDraftToken(draftToken: string) {
 // ─── getTapeByPublicId (for recipient view) ──────────────────────────────────
 
 export async function getTapeByPublicId(publicId: string) {
+  'use server';
+  
+  console.log(`[getTapeByPublicId] >>> START - publicId: ${publicId}`);
+  
   try {
-    console.log(`[getTapeByPublicId] Fetching tape with publicId: ${publicId}`);
+    console.log(`[getTapeByPublicId] Querying database...`);
     
     const tape = await prisma.tape.findUnique({
       where: { publicId },
@@ -279,29 +283,33 @@ export async function getTapeByPublicId(publicId: string) {
       },
     });
 
-    console.log(`[getTapeByPublicId] Query completed. Tape found:`, !!tape);
+    console.log(`[getTapeByPublicId] Query result:`, tape ? `Found tape ${tape.id}` : 'No tape found');
 
     if (!tape) {
-      console.log(`[getTapeByPublicId] No tape found with publicId: ${publicId}`);
+      console.log(`[getTapeByPublicId] >>> RETURN NULL - No tape found`);
       return null;
     }
 
-    console.log(`[getTapeByPublicId] Tape details:`, {
-      id: tape.id,
-      status: tape.status,
-      trackCount: tape.tracks.length,
-      tracks: tape.tracks.map(t => ({ id: t.id, title: t.title, providerTrackId: t.providerTrackId }))
-    });
+    console.log(`[getTapeByPublicId] Tape details - status: ${tape.status}, tracks: ${tape.tracks.length}`);
+    
+    if (tape.tracks.length > 0) {
+      console.log(`[getTapeByPublicId] First track:`, {
+        id: tape.tracks[0].id,
+        title: tape.tracks[0].title,
+        providerTrackId: tape.tracks[0].providerTrackId,
+        side: tape.tracks[0].side
+      });
+    }
 
     if (tape.status !== "published") {
-      console.log(`[getTapeByPublicId] Tape status is "${tape.status}", not "published" - returning null`);
+      console.log(`[getTapeByPublicId] >>> RETURN NULL - Status is "${tape.status}", not "published"`);
       return null;
     }
 
-    console.log(`[getTapeByPublicId] Returning published tape with ${tape.tracks.length} tracks`);
+    console.log(`[getTapeByPublicId] >>> RETURN TAPE - Published tape with ${tape.tracks.length} tracks`);
     return tape;
   } catch (error) {
-    console.error(`[getTapeByPublicId] Database error:`, error);
+    console.error(`[getTapeByPublicId] >>> ERROR:`, error);
     throw error;
   }
 }
