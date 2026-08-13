@@ -17,6 +17,9 @@ export default async function RecordSuccessPage({
   const tape = await getTapeByPublicId(publicId);
   if (!tape) notFound();
 
+  const VALID_STYLES = new Set(["classic", "y2k", "love", "road_trip"]);
+  const safeStyle = VALID_STYLES.has(tape.style ?? "") ? tape.style as any : "classic";
+
   return (
     <SendTapeClient
       publicId={publicId}
@@ -24,7 +27,7 @@ export default async function RecordSuccessPage({
       title={tape.title ?? "Untitled Tape"}
       senderName={tape.senderName}
       recipientName={tape.recipientName ?? "Someone"}
-      style={tape.style as any}
+      style={safeStyle}
     />
   );
 }

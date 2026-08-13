@@ -1,31 +1,89 @@
 @import "tailwindcss";
 
-/* ─── CASSETTE design tokens ─── */
+/* ─── CASSETTE Design System v4 ─────────────────────────────────────────────
+   North star: Indian nostalgic warmth — marigold mornings, postage-stamp
+   borders, hand-drawn doodles, aged paper, and Bollywood cassette colour.
+   UI stays warm and personal. The cassette owns the colour.
+─────────────────────────────────────────────────────────────────────────── */
+
 @theme inline {
-  /* Fonts */
+  /* ── Fonts ── */
   --font-display: var(--font-playfair);
   --font-ui:      var(--font-inter);
 
-  /* Warm neutral chrome palette */
-  --color-cream:        #F5F0E8;
+  /* ── Core UI — Aged paper warm surface ── */
+  --color-paper:        #FAF6EF;
+  --color-warm-white:   #FFFDF8;
+  --color-cream:        #F5EFE0;
+  --color-cream-mid:    #EDE4D0;
+  --color-ink:          #1C140A;
+  --color-ink-soft:     #4A3828;
+  --color-muted:        #8A7A68;
+  --color-hairline:     #D9CDB8;
+  --color-hairline-mid: #E8E0D0;
+
+  /* ── Legacy tokens (kept for backward compat) ── */
   --color-cream-dim:    #EDE7D9;
-  --color-ink:          #1C1814;
   --color-ink-muted:    #6B5E4E;
   --color-ink-faint:    #A89880;
 
-  /* Scene accent colours (carried by illustrations, not chrome) */
-  --color-terracotta:   #C4503A;
-  --color-amber:        #D4882A;
-  --color-dusty-blue:   #5B7FA6;
-  --color-tape-brown:   #3D2B1F;
-  --color-tape-shell:   #2A1F14;
+  /* ── Indian accent palette ── */
+  --color-marigold:     #E8901A;   /* saffron/marigold — primary */
+  --color-terracotta:   #C4503A;   /* deep terracotta CTA */
+  --color-bharat-red:   #C0392B;   /* India Post pillar-box red */
+  --color-turmeric:     #D4A520;   /* turmeric gold */
+  --color-lotus:        #D4608A;   /* lotus pink */
+  --color-forest:       #2D6A4F;   /* deep forest */
+  --color-teal:         #2A7A8C;   /* truck-art teal */
+  --color-indigo:       #3D3589;   /* deep indigo */
+  --color-dusty-rose:   #E8B4A0;   /* dusty rose/chai */
+  --color-henna:        #8B3A1A;   /* henna brown */
 
-  /* Player bar */
-  --color-bar-bg:       rgba(28, 24, 20, 0.82);
-  --color-bar-border:   rgba(245, 240, 232, 0.10);
+  /* ── Accent aliases for backward compat ── */
+  --color-coral:        #E8703A;
+  --color-strawberry:   #C4503A;
+  --color-sunshine:     #E8C430;
+  --color-sky:          #5AC8FA;
+  --color-blue:         #2A7A8C;
+  --color-mint:         #34C759;
+  --color-lavender:     #B080E0;
+  --color-peach:        #E8703A;
+  --color-amber:        #E8901A;
+
+  /* ── Tape shell accent colors (cassette owns these) ── */
+  --tape-cream:       #F5EFE0;
+  --tape-cherry:      #E8384F;
+  --tape-peach:       #FF8C54;
+  --tape-butter:      #F5C842;
+  --tape-sky:         #5AC8FA;
+  --tape-pool:        #2DBFBF;
+  --tape-lavender:    #C084FC;
+  --tape-mint:        #34C759;
+  --tape-transparent: rgba(200,220,240,0.55);
+  --tape-smoky:       #4A4550;
+
+  /* ── Shadows ── */
+  --shadow-soft:    0 8px 30px rgba(0,0,0,0.08);
+  --shadow-raised:  0 20px 60px rgba(0,0,0,0.14);
+  --shadow-cassette: 0 16px 48px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.12);
+
+  /* ── Radius ── */
+  --radius-sm:  10px;
+  --radius-md:  16px;
+  --radius-lg:  24px;
+  --radius-xl:  32px;
+
+  /* ── Motion durations ── */
+  --duration-micro:     140ms;
+  --duration-button:    120ms;
+  --duration-panel:     280ms;
+  --duration-cassette:  650ms;
+  --duration-flip:      850ms;
+  --duration-insert:   1000ms;
+  --duration-gift:     1400ms;
 }
 
-/* ─── Base ─── */
+/* ─── Base reset ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
@@ -35,30 +93,301 @@ html, body {
 }
 
 body {
-  background: var(--color-ink);
-  color: var(--color-cream);
+  background: var(--color-paper);
+  color: var(--color-ink);
   font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Film-grain overlay (applied via pseudo on the scene) */
-.grain::after {
+/* ─── Indian nostalgic texture overlay on body ────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.68' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='0.028'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+  mix-blend-mode: multiply;
+  opacity: 0.7;
+}
+
+/* ─── Typography ──────────────────────────────────────────────────────────── */
+.font-display { font-family: var(--font-display, 'Playfair Display', Georgia, serif); }
+.font-ui      { font-family: var(--font-ui, 'Inter', system-ui, sans-serif); }
+
+/* Handwritten-feeling label text */
+.font-label {
+  font-family: var(--font-display, 'Playfair Display', Georgia, serif);
+  font-style: italic;
+}
+
+/* Indian truck-art headline style */
+.font-truck {
+  font-family: var(--font-display, 'Playfair Display', Georgia, serif);
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Surface helpers ─────────────────────────────────────────────────────── */
+
+/* Paper card — warm aged paper */
+.surface-paper {
+  background: #FFFDF8;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+}
+
+/* Cream surface — warmer aged feel */
+.surface-cream {
+  background: var(--color-cream);
+  border: 1px solid var(--color-hairline-mid);
+  border-radius: var(--radius-md);
+}
+
+/* Indian postage stamp surface */
+.surface-stamp {
+  background: #FFFDF8;
+  border: 2px solid var(--color-bharat-red);
+  border-radius: 4px;
+  position: relative;
+}
+
+/* ─── Postage stamp perforations ──────────────────────────────────────────── */
+.stamp-perforated {
+  position: relative;
+  background: #FFFDF8;
+}
+.stamp-perforated::before,
+.stamp-perforated::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  height: 0;
+  /* Dashed line simulates perforations */
+  border-top: 4px dashed rgba(192,57,43,0.35);
+}
+.stamp-perforated::before { top: -6px; }
+.stamp-perforated::after  { bottom: -6px; }
+
+/* ─── Halftone overlay ────────────────────────────────────────────────────── */
+.halftone {
+  position: relative;
+}
+.halftone::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
-  mix-blend-mode: overlay;
+  border-radius: inherit;
+  background-image: radial-gradient(circle, rgba(0,0,0,0.08) 1px, transparent 1px);
+  background-size: 6px 6px;
+  mix-blend-mode: multiply;
+  opacity: 0.5;
   z-index: 1;
 }
 
-/* ─── Typography helpers ─── */
-.font-display { font-family: var(--font-display, 'Playfair Display', Georgia, serif); }
-.font-ui      { font-family: var(--font-ui,      'Inter',            system-ui, sans-serif); }
+/* ─── Indian newspaper column rule ───────────────────────────────────────── */
+.column-rule {
+  border-left: 2px double var(--color-hairline);
+  padding-left: 16px;
+}
 
-/* ─── Reduced-motion ─── */
+/* ─── Truck-art border frame ──────────────────────────────────────────────── */
+.truck-art-border {
+  border: 3px solid var(--color-marigold);
+  box-shadow:
+    inset 0 0 0 2px var(--color-bharat-red),
+    0 0 0 1px var(--color-marigold);
+  border-radius: 6px;
+}
+
+/* ─── Input system ────────────────────────────────────────────────────────── */
+.cassette-input {
+  width: 100%;
+  background: #FFFDF8;
+  border: 1.5px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.cassette-input::placeholder { color: var(--color-muted); }
+.cassette-input:focus {
+  border-color: var(--color-marigold);
+  box-shadow: 0 0 0 3px rgba(232,144,26,0.14);
+}
+
+/* ─── Button system ───────────────────────────────────────────────────────── */
+
+/* Primary CTA — marigold-to-terracotta Indian sunset gradient */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 32px;
+  border-radius: 99px;
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #E8901A 0%, #C4503A 100%);
+  box-shadow: 0 4px 20px rgba(232,144,26,0.30), 0 1px 0 rgba(255,255,255,0.12) inset;
+  border: none;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+}
+.btn-primary:hover { opacity: 0.92; box-shadow: 0 6px 28px rgba(232,144,26,0.42); }
+.btn-primary:active { transform: scale(0.97) translateY(1px); }
+
+/* Ghost button — aged paper border */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border-radius: 99px;
+  font-family: var(--font-ui, 'Inter', system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  background: transparent;
+  border: 1.5px solid var(--color-hairline);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.btn-ghost:hover {
+  border-color: var(--color-marigold);
+  color: var(--color-marigold);
+}
+.btn-ghost:active { transform: scale(0.97); }
+
+/* ─── Paper texture — aged Indian paper grain ─────────────────────────────── */
+.paper-grain {
+  position: relative;
+}
+.paper-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.042'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  mix-blend-mode: multiply;
+  opacity: 0.65;
+  z-index: 1;
+}
+
+/* ─── Shelf wood texture — Indian rosewood ────────────────────────────────── */
+.shelf-wood {
+  background: linear-gradient(180deg,
+    #C4874A 0%,
+    #A86A2C 35%,
+    #8C5018 60%,
+    #703A08 100%
+  );
+  box-shadow: 0 4px 0 #5A2C04, 0 6px 16px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,220,140,0.22);
+}
+
+/* ─── Cassette deck surface ───────────────────────────────────────────────── */
+.deck-surface {
+  background: linear-gradient(180deg, #E8E0D4 0%, #D4C8B8 100%);
+  border: 1px solid #C0B09C;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.55);
+}
+
+/* ─── J-Card paper — aged letter paper ───────────────────────────────────── */
+.jcard-paper {
+  background: #FFFDF5;
+  border: 1px solid #E0D4B8;
+  box-shadow: 3px 3px 10px rgba(80,40,0,0.08), -1px -1px 4px rgba(80,40,0,0.04);
+}
+
+/* ─── Note paper — lined notebook feel ───────────────────────────────────── */
+.note-paper {
+  background: #FFFEF0;
+  border: 1px solid #EDE8D0;
+  border-radius: 4px;
+  box-shadow: 2px 3px 8px rgba(80,40,0,0.09);
+  position: relative;
+}
+/* Red notebook margin line */
+.note-paper::before {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  background: #FFBBBB;
+  opacity: 0.5;
+}
+
+/* ─── Indian envelope paper ───────────────────────────────────────────────── */
+.envelope-paper {
+  background: linear-gradient(145deg, #FFF8E8 0%, #F5EDD4 50%, #EDE4C4 100%);
+  border: 1px solid #D4B878;
+  box-shadow: 0 8px 32px rgba(80,40,0,0.12), 0 2px 8px rgba(80,40,0,0.08);
+}
+
+/* ─── Bharat Post stamp frame ─────────────────────────────────────────────── */
+.bharatpost-stamp {
+  background: #FFFDF8;
+  border: 2.5px solid #C0392B;
+  position: relative;
+  /* Simulated perforations via repeating-linear-gradient on border */
+  box-shadow:
+    0 0 0 1.5px #FFFDF8,
+    0 0 0 3px #C0392B,
+    0 2px 8px rgba(192,57,43,0.15);
+}
+
+/* ─── Marigold garland divider ────────────────────────────────────────────── */
+.garland-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.garland-divider::before,
+.garland-divider::after {
+  content: '✦ ✦ ✦';
+  color: var(--color-marigold);
+  font-size: 10px;
+  letter-spacing: 4px;
+  opacity: 0.6;
+}
+
+/* ─── Vintage cassette label lines ────────────────────────────────────────── */
+.label-lines {
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0px,
+    transparent 13px,
+    rgba(0,0,0,0.06) 13px,
+    rgba(0,0,0,0.06) 14px
+  );
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-hairline);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* ─── Reduced motion ──────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -67,7 +396,71 @@ body {
   }
 }
 
-/* ─── Scrollbar (subtle) ─── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-ink-muted); border-radius: 2px; }
+/* ─── Focus visible ───────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-marigold);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(232,144,26,0.20);
+  color: var(--color-ink);
+}
+
+/* ─── Page transition helper ──────────────────────────────────────────────── */
+.page-enter {
+  animation: pageEnter 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Reel spin keyframe ─────────────────────────────────────────────────── */
+@keyframes reelSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ─── Tape hiss shimmer on label ─────────────────────────────────────────── */
+@keyframes labelShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* ─── Marigold pulse — for REC indicator etc ─────────────────────────────── */
+@keyframes marigoldPulse {
+  0%, 100% { box-shadow: 0 0 6px 0 rgba(232,144,26,0.6); }
+  50%       { box-shadow: 0 0 14px 4px rgba(232,144,26,0.3); }
+}
+
+/* ─── Envelope open animation ────────────────────────────────────────────── */
+@keyframes envelopeFlap {
+  0%   { transform: rotateX(0deg); }
+  40%  { transform: rotateX(-140deg); }
+  100% { transform: rotateX(-180deg); }
+}
+
+/* ─── Indian border ornament pattern ─────────────────────────────────────── */
+.border-ornament {
+  border-image: repeating-linear-gradient(
+    90deg,
+    var(--color-marigold) 0px,
+    var(--color-marigold) 4px,
+    transparent 4px,
+    transparent 8px,
+    var(--color-bharat-red) 8px,
+    var(--color-bharat-red) 12px,
+    transparent 12px,
+    transparent 16px
+  ) 3;
+}
+
+/* ─── Doodle wiggle animation ─────────────────────────────────────────────── */
+@keyframes doodleWiggle {
+  0%, 100% { transform: rotate(-3deg) scale(1); }
+  25%       { transform: rotate(3deg) scale(1.05); }
+  75%       { transform: rotate(-2deg) scale(0.97); }
+}

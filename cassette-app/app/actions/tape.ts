@@ -1,10 +1,21 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
 import { generatePublicId, generateDraftToken, DRAFT_COOKIE } from "@/app/lib/tokens";
 import type { TapeStyle, TapeRelationship, TrackInput } from "@/app/lib/types";
+
+/** Extract the real client IP from common proxy headers */
+async function getClientIp(): Promise<string> {
+  const hdrs = await headers();
+  return (
+    hdrs.get("x-forwarded-for")?.split(",")[0].trim() ||
+    hdrs.get("x-real-ip") ||
+    hdrs.get("cf-connecting-ip") || // Cloudflare
+    ""
+  );
+}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -22,9 +33,9 @@ async function getVerifiedTape(draftId: string) {
 // ─── createDraft ────────────────────────────────────────────────────────────
 
 export async function createDraft(formData: FormData) {
-  const senderName   = (formData.get("senderName")   as string | null)?.trim() ?? "";
-  const relationship = (formData.get("relationship") as string | null) ?? "other";
-  const style        = (formData.get("style")        as TapeStyle | null) ?? "classic";
+  const senderName    = (formData.get("senderName")    as string | null)?.trim() ?? "";
+  const relationship  = (formData.get("relationship")  as string | null) ?? "other";
+  const style         = (formData.get("style")         as TapeStyle | null) ?? "classic";
   const recipientName = (formData.get("recipientName") as string | null)?.trim() || null;
   const title         = (formData.get("title")         as string | null)?.trim() || null;
   const dedication    = (formData.get("dedication")    as string | null)?.trim().slice(0, 500) || null;
@@ -33,7 +44,7 @@ export async function createDraft(formData: FormData) {
     return { error: "Please enter your name." };
   }
 
-  // Rate limiting: max 10 drafts per session per hour
+  // ── Rate limiting: 10 drafts per session + per IP per hour ──────────────
   const jar = await cookies();
   let sessionId = jar.get("session_id")?.value;
   if (!sessionId) {
@@ -46,10 +57,16 @@ export async function createDraft(formData: FormData) {
     });
   }
 
-  const rateLimitKey = `draft:${sessionId}`;
+  const ip = await getClientIp();
   const { checkRateLimit } = await import("@/app/lib/rate-limit");
-  if (!checkRateLimit(rateLimitKey, 10, 3600000)) {
-    return { error: "Too many tapes created. Please try again later." };
+  const rl = checkRateLimit(`draft:${sessionId}`, ip, 10, 60 * 60 * 1000);
+
+  if (!rl.allowed) {
+    const mins = Math.ceil(rl.retryAfterSec / 60);
+    return {
+      error: `Too many tapes created. Please wait ${mins} minute${mins !== 1 ? "s" : ""} before trying again.`,
+      retryAfterSec: rl.retryAfterSec,
+    };
   }
 
   const publicId   = generatePublicId();
@@ -76,6 +93,15 @@ export async function createDraft(formData: FormData) {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
+
+  // Track tape creation started
+  const { trackEvent, EVENTS } = await import("@/app/lib/posthog");
+  trackEvent(tape.senderName, EVENTS.TAPE_CREATED, {
+    tapeId: tape.publicId,
+    style,
+    relationship,
+    hasRecipient: !!recipientName,
+  }).catch(err => console.warn("PostHog tracking error:", err));
 
   redirect(`/create/${tape.id}`);
 }
@@ -335,6 +361,29 @@ export async function recordShare(tapeId: string, platform: string) {
 
   return { ok: true };
 }
+// ─── getPublicTapes (for homepage shelf) ────────────────────────────────────
+
+export async function getPublicTapes(limit = 18) {
+  // Try public-visibility tapes first; fall back gracefully if field doesn't match
+  const tapes = await prisma.tape.findMany({
+    where: {
+      status: "published",
+      // Only show tapes explicitly set to "public" — unlisted tapes stay private
+      visibility: "public",
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      publicId: true,
+      title: true,
+      senderName: true,
+      recipientName: true,
+      style: true,
+    },
+  }).catch(() => [] as never[]);
+  return tapes;
+}
+
 // ─── recordView ──────────────────────────────────────────────────────────────
 
 export async function recordView(tapeId: string, sessionId: string) {

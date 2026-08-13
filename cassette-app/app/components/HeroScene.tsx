@@ -1,7 +1,21 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform, animate as fmAnimate } from "framer-motion";
-import { useRef, useState, useEffect } from "react";
+import { motion, useMotionValue, useSpring, animate as fmAnimate } from "framer-motion";
+import { useRef, useState } from "react";
+
+/**
+ * Convert hex color to RGB string (for use in rgba())
+ */
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (result) {
+    const r = parseInt(result[1], 16);
+    const g = parseInt(result[2], 16);
+    const b = parseInt(result[3], 16);
+    return `${r},${g},${b}`;
+  }
+  return "212,136,42"; // fallback to accent color
+}
 
 /**
  * HeroScene — cinematic night-drive backdrop + interactive cassette reel.
@@ -10,17 +24,51 @@ import { useRef, useState, useEffect } from "react";
  * On release, applies inertia (exponential decay) then spring snap to 0.
  * Simulates mass + friction on a real spinning wheel.
  */
-export default function HeroScene({ className = "" }: { className?: string }) {
+export default function HeroScene({ className = "", style = "classic" }: { className?: string; style?: "classic" | "y2k" | "love" | "road_trip" }) {
   // Reel rotation
   const rotation = useMotionValue(0);
   const springRotation = useSpring(rotation, { stiffness: 60, damping: 18, mass: 1.2 });
 
-  const isDragging = useRef(false);
+  // Style-specific color palettes
+  const styleThemes = {
+    classic: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #1a1230 0%, #0c0a18 40%, #060408 100%)",
+      accentColor: "#D4882A",
+      secondaryColor: "#C4503A",
+      horizonColor: "#D4882A",
+      bokehColors: ["#D4882A", "#C4503A", "#F5C842", "#5B7FA6"],
+    },
+    y2k: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #2a0850 0%, #1a0f3f 40%, #0a0515 100%)",
+      accentColor: "#E040FB",
+      secondaryColor: "#00E5FF",
+      horizonColor: "#E040FB",
+      bokehColors: ["#E040FB", "#00E5FF", "#FF80FF", "#00FFFF"],
+    },
+    love: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #3a1a2a 0%, #2a0f1f 40%, #0f0509 100%)",
+      accentColor: "#D45A6A",
+      secondaryColor: "#F7A8B0",
+      horizonColor: "#D45A6A",
+      bokehColors: ["#D45A6A", "#F7A8B0", "#FFC0C8", "#FF6B7A"],
+    },
+    road_trip: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #0f1a2a 0%, #0a0f1f 40%, #050609 100%)",
+      accentColor: "#5B7FA6",
+      secondaryColor: "#8BB8D4",
+      horizonColor: "#5B7FA6",
+      bokehColors: ["#5B7FA6", "#8BB8D4", "#A8D0E8", "#3D6B8B"],
+    },
+  };
+
+  const theme = styleThemes[style] || styleThemes.classic;
   const lastAngle = useRef(0);
   const lastTime = useRef(0);
   const angularVelocity = useRef(0); // degrees/ms
   const reelRef = useRef<HTMLDivElement>(null);
   const inertiaAnimRef = useRef<ReturnType<typeof fmAnimate> | null>(null);
+  const isDragging = useRef(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
 
   function getAngle(e: React.PointerEvent | PointerEvent, el: HTMLElement): number {
@@ -34,6 +82,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
     if (!reelRef.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     isDragging.current = true;
+    setIsDraggingState(true);
     lastAngle.current = getAngle(e, reelRef.current);
     lastTime.current = e.timeStamp;
     angularVelocity.current = 0;
@@ -65,6 +114,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
   function onPointerUp() {
     if (!isDragging.current) return;
     isDragging.current = false;
+    setIsDraggingState(false);
 
     const vel = angularVelocity.current; // deg/ms
     const speed = Math.abs(vel);
@@ -104,8 +154,8 @@ export default function HeroScene({ className = "" }: { className?: string }) {
       <div
         className="absolute inset-0"
         style={{
-          background:
-            "radial-gradient(ellipse at 30% 0%, #1a1230 0%, #0c0a18 40%, #060408 100%)",
+          background: theme.bgGradient,
+          transition: "background 0.6s ease-in-out",
         }}
       />
 
@@ -132,7 +182,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
           return (
             <line
               key={i} x1={x} y1={-20} x2={x - 9} y2={85}
-              stroke="#8BB8D4" strokeWidth="0.7" strokeLinecap="round" opacity="0.55"
+              stroke={theme.secondaryColor} strokeWidth="0.7" strokeLinecap="round" opacity="0.55"
             >
               <animate attributeName="y1" values="-20;625" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
               <animate attributeName="y2" values="85;730" dur={`${dur}s`} begin={`${delay}s`} repeatCount="indefinite" />
@@ -156,20 +206,20 @@ export default function HeroScene({ className = "" }: { className?: string }) {
           </filter>
         </defs>
         {/* Horizon city glow */}
-        <ellipse cx="400" cy="315" rx="380" ry="75" fill="#D4882A" opacity="0.07" filter="url(#bokeh)" />
+        <ellipse cx="400" cy="315" rx="380" ry="75" fill={theme.horizonColor} opacity="0.07" filter="url(#bokeh)" />
         {[
-          { cx: 75,  cy: 278, r: 19, color: "#D4882A", o: 0.36 },
-          { cx: 155, cy: 308, r: 11, color: "#C4503A", o: 0.26 },
-          { cx: 255, cy: 288, r: 23, color: "#F5C842", o: 0.21 },
-          { cx: 338, cy: 302, r: 9,  color: "#D4882A", o: 0.31 },
-          { cx: 448, cy: 283, r: 17, color: "#5B7FA6", o: 0.23 },
-          { cx: 525, cy: 298, r: 13, color: "#F5C842", o: 0.19 },
-          { cx: 618, cy: 273, r: 21, color: "#C4503A", o: 0.29 },
-          { cx: 698, cy: 293, r: 10, color: "#D4882A", o: 0.33 },
-          { cx: 748, cy: 308, r: 15, color: "#5B7FA6", o: 0.21 },
-          { cx: 118, cy: 338, r: 7,  color: "#F5C842", o: 0.16 },
-          { cx: 378, cy: 268, r: 29, color: "#D4882A", o: 0.13 },
-          { cx: 578, cy: 318, r: 8,  color: "#C4503A", o: 0.23 },
+          { cx: 75,  cy: 278, r: 19, color: theme.bokehColors[0], o: 0.36 },
+          { cx: 155, cy: 308, r: 11, color: theme.bokehColors[1], o: 0.26 },
+          { cx: 255, cy: 288, r: 23, color: theme.bokehColors[2], o: 0.21 },
+          { cx: 338, cy: 302, r: 9,  color: theme.bokehColors[0], o: 0.31 },
+          { cx: 448, cy: 283, r: 17, color: theme.bokehColors[3], o: 0.23 },
+          { cx: 525, cy: 298, r: 13, color: theme.bokehColors[2], o: 0.19 },
+          { cx: 618, cy: 273, r: 21, color: theme.bokehColors[1], o: 0.29 },
+          { cx: 698, cy: 293, r: 10, color: theme.bokehColors[0], o: 0.33 },
+          { cx: 748, cy: 308, r: 15, color: theme.bokehColors[3], o: 0.21 },
+          { cx: 118, cy: 338, r: 7,  color: theme.bokehColors[2], o: 0.16 },
+          { cx: 378, cy: 268, r: 29, color: theme.bokehColors[0], o: 0.13 },
+          { cx: 578, cy: 318, r: 8,  color: theme.bokehColors[1], o: 0.23 },
         ].map((dot, i) => (
           <circle key={i} cx={dot.cx} cy={dot.cy} r={dot.r}
             fill={dot.color} opacity={dot.o} filter="url(#bokeh)" />
@@ -181,8 +231,8 @@ export default function HeroScene({ className = "" }: { className?: string }) {
         className="absolute bottom-0 left-0 right-0"
         style={{
           height: "42%",
-          background:
-            "radial-gradient(ellipse at 50% 100%, rgba(212,136,42,0.20) 0%, rgba(196,80,58,0.09) 40%, transparent 70%)",
+          background: `radial-gradient(ellipse at 50% 100%, rgba(${hexToRgb(theme.accentColor)}, 0.20) 0%, rgba(${hexToRgb(theme.secondaryColor)}, 0.09) 40%, transparent 70%)`,
+          transition: "background 0.6s ease-in-out",
         }}
       />
 
@@ -207,17 +257,17 @@ export default function HeroScene({ className = "" }: { className?: string }) {
         <line x1="320" y1="123" x2="320" y2="185" stroke="#3D2B1F" strokeWidth="4.5" opacity="0.5" />
         <line x1="264" y1="154" x2="376" y2="154" stroke="#3D2B1F" strokeWidth="4.5" opacity="0.5" />
         {/* Gauges */}
-        <circle cx="178" cy="140" r="29" fill="none" stroke="#D4882A" strokeWidth="1.5" opacity="0.42" />
-        <circle cx="178" cy="140" r="22" fill="rgba(212,136,42,0.06)" />
-        <circle cx="458" cy="138" r="25" fill="none" stroke="#D4882A" strokeWidth="1.5" opacity="0.32" />
+        <circle cx="178" cy="140" r="29" fill="none" stroke={theme.accentColor} strokeWidth="1.5" opacity="0.42" />
+        <circle cx="178" cy="140" r="22" fill={`rgba(${hexToRgb(theme.accentColor)}, 0.06)`} />
+        <circle cx="458" cy="138" r="25" fill="none" stroke={theme.accentColor} strokeWidth="1.5" opacity="0.32" />
         {/* Vents */}
         <rect x="350" y="94" width="82" height="31" rx="5" fill="#1a1410" opacity="0.82" />
         {[0,1,2,3,4].map(i => (
           <rect key={i} x={357 + i * 14} y={99} width={9} height={21} rx={2.5} fill="#2A1F14" opacity="0.92" />
         ))}
         {/* Instrument glows */}
-        <circle cx="178" cy="140" r="19" fill="#D4882A" opacity="0.14" filter="url(#bokeh-sm2)" />
-        <circle cx="458" cy="138" r="17" fill="#5B7FA6" opacity="0.14" filter="url(#bokeh-sm2)" />
+        <circle cx="178" cy="140" r="19" fill={theme.accentColor} opacity="0.14" filter="url(#bokeh-sm2)" />
+        <circle cx="458" cy="138" r="17" fill={theme.bokehColors[3]} opacity="0.14" filter="url(#bokeh-sm2)" />
       </svg>
 
       {/* Windshield vignette */}
@@ -235,7 +285,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
         style={{
           bottom: "calc(200px * 0.45 + 24px)",
           right: "clamp(20px, 8vw, 80px)",
-          cursor: isDragging.current ? "grabbing" : "grab",
+          cursor: isDraggingState ? "grabbing" : "grab",
         }}
       >
         <motion.div
@@ -249,7 +299,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
           title="Drag to spin"
         >
           <svg viewBox="0 0 56 56" width="56" height="56">
-            <circle cx="28" cy="28" r="26" fill="#1A1208" stroke="#D4882A" strokeWidth="1" strokeOpacity="0.35" />
+            <circle cx="28" cy="28" r="26" fill="#1A1208" stroke={theme.accentColor} strokeWidth="1" strokeOpacity="0.35" />
             <circle cx="28" cy="28" r="18" fill="#2A1F14" />
             <circle cx="28" cy="28" r="11" fill="#0D0A07" />
             {[0, 60, 120, 180, 240, 300].map(angle => {
@@ -262,7 +312,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
                 <line
                   key={angle}
                   x1={x1} y1={y1} x2={x2} y2={y2}
-                  stroke="#D4882A" strokeWidth="2" strokeLinecap="round" opacity="0.7"
+                  stroke={theme.accentColor} strokeWidth="2" strokeLinecap="round" opacity="0.7"
                 />
               );
             })}
@@ -278,7 +328,7 @@ export default function HeroScene({ className = "" }: { className?: string }) {
         {/* Drag hint — fades after first interaction */}
         <motion.p
           initial={{ opacity: 0.5 }}
-          animate={{ opacity: isDragging.current || isSpinning ? 0 : 0.4 }}
+          animate={{ opacity: isDraggingState || isSpinning ? 0 : 0.4 }}
           transition={{ duration: 0.3 }}
           className="text-center mt-1"
           style={{ fontSize: "9px", fontFamily: "monospace", color: "#6B5E4E", letterSpacing: "0.15em" }}

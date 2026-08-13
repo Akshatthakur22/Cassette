@@ -31,7 +31,7 @@ export default function CassetteCase({
   senderName = "Someone",
   className = "",
 }: CassetteCaseProps) {
-  const colors = STYLE_COLORS[style];
+  const colors = STYLE_COLORS[style] ?? STYLE_COLORS["classic"];
 
   // Lid rotation: 0 = closed, -160 = fully open (perspective flip)
   const lidAngle = state === "open" ? -162 : state === "opening" ? -162 : 0;

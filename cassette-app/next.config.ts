@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
   // Optimize for serverless
   poweredByHeader: false,
   
+  // Configure image qualities for next/image
+  images: {
+    qualities: [75, 80, 85],
+  },
+  
   // Ensure proper headers for caching
   async headers() {
     return [

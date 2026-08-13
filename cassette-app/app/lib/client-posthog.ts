@@ -7,6 +7,8 @@ export const EVENTS = {
   TAPE_PLAYED: "tape_played",
   TRACK_PLAYED: "track_played",
   MAKE_ONE_BACK_CLICKED: "make_one_back_clicked",
+  TAPE_CREATION_STARTED: "create_started",
+  RECIPIENT_CREATED_TAPE: "recipient_created_tape",
 };
 
 /**

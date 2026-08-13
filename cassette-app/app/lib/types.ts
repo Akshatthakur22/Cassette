@@ -1,4 +1,10 @@
-export type TapeStyle = "classic" | "y2k" | "love" | "road_trip";
+export type TapeStyle =
+  // New 10-color system
+  | "cream" | "cherry" | "peach" | "butter"
+  | "sky" | "pool" | "lavender" | "mint"
+  | "transparent" | "smoky"
+  // Legacy DB values (backward compat)
+  | "classic" | "y2k" | "love" | "road_trip";
 export type TapeRelationship =
   | "partner"
   | "best_friend"
