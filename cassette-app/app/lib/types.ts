@@ -37,8 +37,15 @@ export interface TapeWithTracks {
   recipientName: string | null;
   relationship: string | null;
   style: TapeStyle;
+  visibility: "unlisted" | "public";
+  memoryDate: Date | null;
   status: string;
+  playlistSourceId?: string | null;
+  playlistSourceUrl?: string | null;
+  playlistName?: string | null;
   createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
   tracks: TrackRow[];
 }
 

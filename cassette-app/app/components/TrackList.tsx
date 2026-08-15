@@ -33,7 +33,8 @@ export default function TrackList({
     >
       {/* J-card style container */}
       <div
-        className="rounded-2xl overflow-hidden jcard-paper"
+        className="rounded-2xl overflow-hidden jcard-paper max-h-96 overflow-y-auto"
+        style={{ scrollBehavior: "smooth" }}
       >
         {/* Side header */}
         <div

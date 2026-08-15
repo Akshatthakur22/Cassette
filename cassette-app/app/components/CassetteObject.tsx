@@ -1,31 +1,9 @@
 "use client";
 
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
-import { playFlipSound } from "@/app/lib/sounds";
-import { useReduceMotion } from "@/app/lib/use-reduce-motion";
+import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
 
 export type CassetteSide = "A" | "B";
-
-/**
- * All tape style keys — new 10-color system + legacy aliases for DB compat.
- * DB stores old values (classic/y2k/love/road_trip); new values added alongside.
- */
-export type TapeColorKey =
-  | "cream" | "cherry" | "peach" | "butter"
-  | "sky" | "pool" | "lavender" | "mint"
-  | "transparent" | "smoky"
-  | "classic" | "y2k" | "love" | "road_trip"; // legacy DB values
-
-/** Visual state of the cassette */
-export type CassetteState =
-  | "idle" | "hover" | "selected"
-  | "inserting" | "inserted" | "ready"
-  | "playing" | "paused" | "stopped"
-  | "rewinding" | "fast_forwarding"
-  | "ejecting" | "flipping"
-  | "recording" | "recorded"
-  | "side_a" | "side_b" | "error";
+export type TapeColorKey = string;
 
 interface CassetteObjectProps {
   side: CassetteSide;
@@ -33,146 +11,30 @@ interface CassetteObjectProps {
   title: string;
   recipientName: string;
   senderName: string;
-  /** Accepts both new color keys and legacy DB style strings */
-  style?: TapeColorKey;
+  style?: string;
   onFlipSide?: () => void;
   isTyping?: boolean;
   className?: string;
-  /** 0–1 playback progress — drives tape ribbon thickness shift */
   progress?: number;
-  /** Cassette visual state */
-  cassetteState?: CassetteState;
-  /** Show/hide the flip button */
+  cassetteState?: string;
   showFlipButton?: boolean;
-  /** Size variant */
   size?: "sm" | "md" | "lg";
 }
 
-/* ─── Color palette — 10 real colors + legacy aliases ──────────────────── */
-interface TapeColors {
-  shell: string;
-  shellGradTop: string;
-  shellGradBot: string;
-  label: string;
-  labelGradBot: string;
-  accent: string;
-  text: string;
-  specular: string;
-  windowTint: string;
-  reelHub: string;
-  isLight: boolean; // determines text color on label
+const FONT_LINK_ID = "cassette-tape-font-link";
+
+function useCassetteFont() {
+  useLayoutEffect(() => {
+    if (document.getElementById(FONT_LINK_ID)) return;
+    const link = document.createElement("link");
+    link.id = FONT_LINK_ID;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Oswald:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
 }
 
-const TAPE_COLORS: Record<TapeColorKey, TapeColors> = {
-  // ── New 10-color system ────────────────────────────────────────────────
-  cream: {
-    shell: "#D4C4A8", shellGradTop: "#E8D8BC", shellGradBot: "#BCA888",
-    label: "#F5EFE0", labelGradBot: "#E0D4B8",
-    accent: "#A07840", text: "#3D2010", specular: "#FFFFFF",
-    windowTint: "#F0E8D0", reelHub: "#C4A870",
-    isLight: true,
-  },
-  cherry: {
-    shell: "#C42040", shellGradTop: "#E03050", shellGradBot: "#901830",
-    label: "#E84060", labelGradBot: "#B01830",
-    accent: "#FFB0C0", text: "#FFFFFF", specular: "#FFC8D4",
-    windowTint: "#800020", reelHub: "#D03050",
-    isLight: false,
-  },
-  peach: {
-    shell: "#E8703A", shellGradTop: "#F08050", shellGradBot: "#C05828",
-    label: "#FF9060", labelGradBot: "#D06030",
-    accent: "#FFD4B8", text: "#FFFFFF", specular: "#FFE0C8",
-    windowTint: "#A04020", reelHub: "#E87848",
-    isLight: false,
-  },
-  butter: {
-    shell: "#E8C430", shellGradTop: "#F4D840", shellGradBot: "#C4A018",
-    label: "#F5D840", labelGradBot: "#D4B020",
-    accent: "#806000", text: "#3D2800", specular: "#FFFFFF",
-    windowTint: "#F0C800", reelHub: "#D4A820",
-    isLight: true,
-  },
-  sky: {
-    shell: "#38A8E8", shellGradTop: "#58C0F8", shellGradBot: "#1888C8",
-    label: "#5AC8FA", labelGradBot: "#2898D8",
-    accent: "#B8E8FF", text: "#002848", specular: "#FFFFFF",
-    windowTint: "#0060A0", reelHub: "#40A8E0",
-    isLight: false,
-  },
-  pool: {
-    shell: "#1A9898", shellGradTop: "#28B8B8", shellGradBot: "#0A7878",
-    label: "#20B0B0", labelGradBot: "#088888",
-    accent: "#88E8E8", text: "#002828", specular: "#D0FFFF",
-    windowTint: "#004848", reelHub: "#18A0A0",
-    isLight: false,
-  },
-  lavender: {
-    shell: "#9060C8", shellGradTop: "#A878D8", shellGradBot: "#6840A0",
-    label: "#B080E0", labelGradBot: "#7848B8",
-    accent: "#E0C8FF", text: "#FFFFFF", specular: "#F0E0FF",
-    windowTint: "#300860", reelHub: "#9868D0",
-    isLight: false,
-  },
-  mint: {
-    shell: "#28A858", shellGradTop: "#38C068", shellGradBot: "#188040",
-    label: "#34C759", labelGradBot: "#1A9840",
-    accent: "#B0F0C8", text: "#002810", specular: "#D0FFE0",
-    windowTint: "#005820", reelHub: "#28A850",
-    isLight: false,
-  },
-  transparent: {
-    shell: "rgba(180,210,235,0.45)", shellGradTop: "rgba(210,230,248,0.55)", shellGradBot: "rgba(160,195,225,0.38)",
-    label: "rgba(225,238,250,0.65)", labelGradBot: "rgba(195,218,240,0.50)",
-    accent: "rgba(120,175,220,0.8)", text: "#1A3050", specular: "rgba(255,255,255,0.9)",
-    windowTint: "rgba(80,120,160,0.3)", reelHub: "rgba(140,185,220,0.7)",
-    isLight: true,
-  },
-  smoky: {
-    shell: "#2E2A30", shellGradTop: "#3E3840", shellGradBot: "#1A1820",
-    label: "#484050", labelGradBot: "#2A2430",
-    accent: "#888098", text: "#F0ECF4", specular: "#D0C8DC",
-    windowTint: "#080610", reelHub: "#403848",
-    isLight: false,
-  },
-
-  // ── Legacy DB aliases → map to closest new color ──────────────────────
-  classic: {
-    shell: "#D4C4A8", shellGradTop: "#E0CC98", shellGradBot: "#B89860",
-    label: "#C8A96E", labelGradBot: "#8B5E3C",
-    accent: "#D4882A", text: "#1C0F05", specular: "#E8C87A",
-    windowTint: "#5A3820", reelHub: "#C09048",
-    isLight: true,
-  },
-  y2k: {
-    shell: "#1A0D2E", shellGradTop: "#280D40", shellGradBot: "#0D0820",
-    label: "#D040F0", labelGradBot: "#8000A8",
-    accent: "#00E5FF", text: "#F8E0FF", specular: "#FF80FF",
-    windowTint: "#100020", reelHub: "#8020B8",
-    isLight: false,
-  },
-  love: {
-    shell: "#2C0A0A", shellGradTop: "#401010", shellGradBot: "#180505",
-    label: "#D45A6A", labelGradBot: "#901828",
-    accent: "#F7A8B0", text: "#FFFFFF", specular: "#FFC0C8",
-    windowTint: "#4A0810", reelHub: "#C84858",
-    isLight: false,
-  },
-  road_trip: {
-    shell: "#0D1A1A", shellGradTop: "#182828", shellGradBot: "#080D0D",
-    label: "#5B7FA6", labelGradBot: "#2A4A6A",
-    accent: "#D4882A", text: "#E8F4FF", specular: "#8BB0D8",
-    windowTint: "#081020", reelHub: "#3A6A96",
-    isLight: false,
-  },
-};
-
-function getColors(style?: TapeColorKey): TapeColors {
-  if (!style) return TAPE_COLORS.cream;
-  return TAPE_COLORS[style] ?? TAPE_COLORS.cream;
-}
-
-/* ─── Component ─────────────────────────────────────────────────────────── */
 export default function CassetteObject({
   side,
   isPlaying,
@@ -188,493 +50,798 @@ export default function CassetteObject({
   showFlipButton = true,
   size = "md",
 }: CassetteObjectProps) {
-  const colors = getColors(style);
-  const reduceMotion = useReduceMotion();
+  useCassetteFont();
 
-  // 3D tilt from pointer — spring-smoothed (disabled on reduce-motion)
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const rotateX = useSpring(
-    useTransform(mouseY, [-1, 1], reduceMotion ? [0, 0] : [5, -5]),
-    { stiffness: 120, damping: 24 }
-  );
-  const rotateY = useSpring(
-    useTransform(mouseX, [-1, 1], reduceMotion ? [0, 0] : [-7, 7]),
-    { stiffness: 120, damping: 24 }
-  );
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [flipping, setFlipping] = useState(false);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [counter, setCounter] = useState(Math.floor(progress * 999));
+  const [localMode, setLocalMode] = useState<"stopped" | "playing" | "rewind" | "ff">("stopped");
 
-  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    mouseX.set(((e.clientX - rect.left) / rect.width) * 2 - 1);
-    mouseY.set(((e.clientY - rect.top) / rect.height) * 2 - 1);
-  }
-  function handleMouseLeave() {
-    mouseX.set(0);
-    mouseY.set(0);
-  }
+  const rafRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number>(0);
+  const leftAngle = useRef(0);
+  const rightAngle = useRef(0);
+  const windRef = useRef(0.32);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [, forceTick] = useState(0);
 
-  // Tape spool physics — left reel loses tape, right gains as progress → 1
-  const leftThickness  = Math.round(14 + (1 - progress) * 18); // 14–32
-  const rightThickness = Math.round(14 + progress * 18);
+  const powerOn = isPlaying || localMode === "playing";
+  const mode = isPlaying ? "playing" : localMode;
 
-  // Asymmetric reel speeds
-  const leftReelDuration  = 1.8 + progress * 0.9;
-  const rightReelDuration = 2.8 - progress * 0.9;
-
-  const playing = isPlaying || cassetteState === "playing";
-  const rewinding = cassetteState === "rewinding";
-  const ffing = cassetteState === "fast_forwarding";
-
-  const reelVariantsLeft = {
-    playing:  { rotate: 360, transition: { repeat: Infinity, duration: leftReelDuration, ease: "linear" as const } },
-    rewinding:{ rotate: -360, transition: { repeat: Infinity, duration: 0.5, ease: "linear" as const } },
-    ff:       { rotate: 360, transition: { repeat: Infinity, duration: 0.4, ease: "linear" as const } },
-    paused:   { rotate: 0,   transition: { duration: 0.5, ease: "easeOut" as const } },
-  };
-  const reelVariantsRight = {
-    playing:  { rotate: 360, transition: { repeat: Infinity, duration: rightReelDuration, ease: "linear" as const } },
-    rewinding:{ rotate: -360, transition: { repeat: Infinity, duration: 0.5, ease: "linear" as const } },
-    ff:       { rotate: 360, transition: { repeat: Infinity, duration: 0.4, ease: "linear" as const } },
-    paused:   { rotate: 0,   transition: { duration: 0.5, ease: "easeOut" as const } },
-  };
-
-  function reelState() {
-    if (rewinding) return "rewinding";
-    if (ffing) return "ff";
-    if (playing) return "playing";
-    return "paused";
-  }
-
-  // Typing pulse on label
-  const [typingPulse, setTypingPulse] = useState(false);
+  // Hydration check
   useEffect(() => {
-    if (isTyping) {
-      setTypingPulse(true);
-      const t = setTimeout(() => setTypingPulse(false), 300);
-      return () => clearTimeout(t);
-    }
-  }, [isTyping, title, recipientName]);
+    setIsHydrated(true);
+  }, []);
 
-  // Label text color depends on whether tape is light or dark
-  const labelTextColor = colors.isLight ? colors.text : colors.text;
-  const labelTextOpacity = colors.isLight ? 1 : 0.95;
+  useEffect(() => {
+    setCounter(Math.floor(progress * 999));
+  }, [progress]);
+
+  useEffect(() => {
+    if (mode === "stopped") {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      return;
+    }
+
+    const speed = mode === "playing" ? 130 : mode === "ff" ? 420 : -420;
+    const windSpeed = mode === "playing" ? 0.012 : mode === "ff" ? 0.05 : -0.05;
+
+    lastTickRef.current = performance.now();
+    let counterAccum = 0;
+
+    const step = (now: number) => {
+      const dt = Math.min((now - lastTickRef.current) / 1000, 0.05);
+      lastTickRef.current = now;
+
+      const leftFullness = 1 - windRef.current;
+      const rightFullness = windRef.current;
+
+      leftAngle.current += speed * dt * (0.6 + (1 - leftFullness) * 0.8);
+      rightAngle.current += speed * dt * (0.6 + (1 - rightFullness) * 0.8);
+
+      windRef.current = Math.max(0.06, Math.min(0.94, windRef.current + windSpeed * dt));
+
+      counterAccum += dt * (mode === "playing" ? 4 : mode === "ff" ? 14 : -14);
+
+      if (Math.abs(counterAccum) >= 1) {
+        const delta = Math.trunc(counterAccum);
+        counterAccum -= delta;
+        setCounter((c) => Math.max(0, Math.min(999, c + delta)));
+      }
+
+      forceTick((t) => (t + 1) % 1000000);
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    rafRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [mode]);
+
+  const handleFlip = () => {
+    setFlipping(true);
+    setTimeout(() => {
+      onFlipSide?.();
+      setCounter(0);
+      windRef.current = 0.32;
+      setFlipping(false);
+    }, 300);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isHydrated) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width - 0.5;
+    const py = (e.clientY - r.top) / r.height - 0.5;
+    setTilt({ x: py * -8, y: px * 10 });
+  };
+
+  const handlePointerLeave = () => {
+    if (!isHydrated) return;
+    setTilt({ x: 0, y: 0 });
+  };
+
+  const handlePlayClick = () => {
+    setLocalMode(localMode === "playing" ? "stopped" : "playing");
+  };
+
+  const handleRewindClick = () => {
+    setLocalMode("rewind");
+  };
+
+  const handleFFClick = () => {
+    setLocalMode("ff");
+  };
+
+  const handleStopClick = () => {
+    setLocalMode("stopped");
+  };
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={side}
-        initial={reduceMotion ? { opacity: 0 } : { rotateY: side === "A" ? -80 : 80, opacity: 0, scale: 0.95 }}
-        animate={{ rotateY: 0, opacity: 1, scale: 1 }}
-        exit={reduceMotion ? { opacity: 0 } : { rotateY: side === "A" ? 80 : -80, opacity: 0, scale: 0.95 }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        style={{ perspective: 1200 }}
-        className={`relative select-none ${className}`}
-      >
-        {/* Pointer-driven 3D tilt wrapper */}
-        <motion.div
-          ref={containerRef}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
-          className="relative"
+    <div
+      className={className}
+      style={{
+        fontFamily: "'Oswald', sans-serif",
+        width: 380,
+        maxWidth: "100%",
+        margin: "0 auto",
+        padding: "6px 10px",
+      }}
+    >
+      <div style={{ perspective: 1800 }}>
+        <div
+          ref={wrapRef}
+          onPointerMove={isHydrated ? handlePointerMove : undefined}
+          onPointerLeave={isHydrated ? handlePointerLeave : undefined}
+          style={{
+            transformStyle: "preserve-3d",
+            transition: flipping
+              ? "transform 560ms cubic-bezier(.4,.1,.2,1)"
+              : "transform 220ms cubic-bezier(.2,.6,.3,1)",
+            transform: `rotateY(${isHydrated && flipping ? 90 : isHydrated ? tilt.y : 0}deg) rotateX(${
+              isHydrated && flipping ? 0 : isHydrated ? tilt.x : 0
+            }deg)`,
+          }}
         >
-          <svg
-            viewBox="0 0 420 260"
-            xmlns="http://www.w3.org/2000/svg"
-            className="w-full h-auto"
+          <div
             style={{
-              filter: `drop-shadow(0 12px 40px rgba(0,0,0,0.22)) drop-shadow(0 4px 12px rgba(0,0,0,0.14))`,
+              position: "relative",
+              borderRadius: 10,
+              padding: 8,
+              background:
+                "linear-gradient(155deg, #c9b98a 0%, #b7a476 45%, #a4905f 100%)",
+              boxShadow: isHydrated
+                ? `
+                0 2px 0 rgba(255,255,255,0.4) inset,
+                0 -6px 14px rgba(0,0,0,0.25) inset,
+                ${6 + tilt.y * 0.6}px ${16 - tilt.x}px 36px rgba(20,15,4,0.45),
+                0 3px 0 rgba(0,0,0,0.15)
+              `
+                : `
+                0 2px 0 rgba(255,255,255,0.4) inset,
+                0 -6px 14px rgba(0,0,0,0.25) inset,
+                6px 16px 36px rgba(20,15,4,0.45),
+                0 3px 0 rgba(0,0,0,0.15)
+              `,
             }}
-            role="img"
-            aria-label={`Cassette tape — Side ${side}, "${title || "Untitled"}"`}
           >
-            <defs>
-              {/* Shell gradient */}
-              <linearGradient id={`sg-${style}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor={colors.shellGradTop} />
-                <stop offset="50%"  stopColor={colors.shell} />
-                <stop offset="100%" stopColor={colors.shellGradBot} />
-              </linearGradient>
+            {/* Fine brushed texture */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 10,
+                background:
+                  "repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 3px)",
+                pointerEvents: "none",
+              }}
+            />
 
-              {/* Shell side shadows */}
-              <linearGradient id={`ssl-${style}`} x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%"  stopColor="#000" stopOpacity="0.28" />
-                <stop offset="18%" stopColor="#000" stopOpacity="0" />
-              </linearGradient>
-              <linearGradient id={`ssr-${style}`} x1="0" y1="0" x2="1" y2="0">
-                <stop offset="82%" stopColor="#000" stopOpacity="0" />
-                <stop offset="100%" stopColor="#000" stopOpacity="0.28" />
-              </linearGradient>
+            {/* 3D Gloss highlight that responds to tilt */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 10,
+                background: isHydrated
+                  ? `radial-gradient(circle at ${
+                      50 + tilt.y * 2.2
+                    }% ${20 - tilt.x * 2}%, rgba(255,255,255,0.38), transparent 38%)`
+                  : "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.38), transparent 38%)",
+                pointerEvents: "none",
+                mixBlendMode: "overlay",
+              }}
+            />
 
-              {/* Top specular edge */}
-              <linearGradient id={`sts-${style}`} x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%"   stopColor={colors.specular} stopOpacity="0" />
-                <stop offset="25%"  stopColor={colors.specular} stopOpacity="0.22" />
-                <stop offset="55%"  stopColor={colors.specular} stopOpacity="0.38" />
-                <stop offset="80%"  stopColor={colors.specular} stopOpacity="0.14" />
-                <stop offset="100%" stopColor={colors.specular} stopOpacity="0" />
-              </linearGradient>
+            {/* Brand watermark */}
+            <div
+              style={{
+                position: "absolute",
+                top: 4,
+                right: 38,
+                fontSize: 7.5,
+                letterSpacing: 1,
+                color: "rgba(60,50,25,0.35)",
+                fontWeight: 600,
+              }}
+            >
+              ◆ TDK
+            </div>
 
-              {/* Label gradient */}
-              <linearGradient id={`lg-${style}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor={colors.label} />
-                <stop offset="100%" stopColor={colors.labelGradBot} />
-              </linearGradient>
-
-              {/* Label gloss */}
-              <linearGradient id={`lgl-${style}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"  stopColor="white" stopOpacity="0.18" />
-                <stop offset="55%" stopColor="white" stopOpacity="0" />
-              </linearGradient>
-
-              {/* Reel hub gradient */}
-              <radialGradient id={`rg-${style}`} cx="50%" cy="35%" r="65%">
-                <stop offset="0%"   stopColor={colors.reelHub} />
-                <stop offset="60%"  stopColor={colors.shell} />
-                <stop offset="100%" stopColor={colors.shellGradBot} />
-              </radialGradient>
-
-              {/* Tape ribbon gradient */}
-              <linearGradient id={`tr-${style}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stopColor={colors.windowTint} stopOpacity="0.9" />
-                <stop offset="40%"  stopColor={colors.shellGradBot} stopOpacity="0.85" />
-                <stop offset="60%"  stopColor={colors.shellGradBot} stopOpacity="0.9" />
-                <stop offset="100%" stopColor={colors.windowTint} stopOpacity="0.8" />
-              </linearGradient>
-
-              {/* Typing pulse glow */}
-              <filter id="typingGlow">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-
-            {/* ── OUTER SHELL ─────────────────────────────────────────────── */}
-            <rect x="4" y="4" width="412" height="252" rx="20" fill={`url(#sg-${style})`} />
-
-            {/* Shell border stroke */}
-            <rect x="4" y="4" width="412" height="252" rx="20"
-              fill="none" stroke="rgba(0,0,0,0.12)" strokeWidth="1.5" />
-
-            {/* Side shadow overlays */}
-            <rect x="4" y="4" width="412" height="252" rx="20" fill={`url(#ssl-${style})`} />
-            <rect x="4" y="4" width="412" height="252" rx="20" fill={`url(#ssr-${style})`} />
-
-            {/* Top edge specular highlight */}
-            <rect x="4" y="4" width="412" height="4" rx="2" fill={`url(#sts-${style})`} />
-            <rect x="20" y="6" width="380" height="1.5" rx="0.75" fill="white" fillOpacity="0.1" />
-
-            {/* Bottom edge shadow */}
-            <rect x="4" y="252" width="412" height="4" rx="2" fill="black" fillOpacity="0.35" />
-
-            {/* ── CORNER SCREWS ───────────────────────────────────────────── */}
-            {([[28, 28], [392, 28], [28, 232], [392, 232]] as [number,number][]).map(([cx, cy], i) => (
-              <g key={i}>
-                {/* Screw base */}
-                <circle cx={cx} cy={cy} r="8"
-                  fill={colors.shellGradBot}
-                  stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
-                {/* Screw face */}
-                <circle cx={cx} cy={cy} r="6"
-                  fill={colors.shell}
-                  stroke="rgba(0,0,0,0.15)" strokeWidth="0.8" />
-                {/* Phillips cross */}
-                <line x1={cx-3.5} y1={cy} x2={cx+3.5} y2={cy}
-                  stroke="rgba(0,0,0,0.3)" strokeWidth="1.2" strokeLinecap="round" />
-                <line x1={cx} y1={cy-3.5} x2={cx} y2={cy+3.5}
-                  stroke="rgba(0,0,0,0.3)" strokeWidth="1.2" strokeLinecap="round" />
-                {/* Specular dot */}
-                <circle cx={cx-1.5} cy={cy-1.5} r="1.5" fill="white" fillOpacity="0.25" />
-              </g>
+            {/* Corner screws - more realistic 3D */}
+            {[
+              { top: 4, left: 4 },
+              { top: 4, right: 4 },
+              { bottom: 4, left: 4 },
+              { bottom: 4, right: 4 },
+            ].map((pos, i) => (
+              <Screw key={i} style={{ position: "absolute", ...pos }} />
             ))}
 
-            {/* ── INNER CAVITY ─────────────────────────────────────────────── */}
-            <rect x="20" y="18" width="380" height="224" rx="12"
-              fill="rgba(0,0,0,0.18)" />
-            <rect x="21" y="19" width="378" height="1" rx="0.5"
-              fill="rgba(0,0,0,0.12)" />
-
-            {/* ── TAPE LABEL ───────────────────────────────────────────────── */}
-            <rect x="102" y="26" width="216" height="208" rx="10"
-              fill={`url(#lg-${style})`} />
-            {/* Label top gloss */}
-            <rect x="102" y="26" width="216" height="104" rx="10"
-              fill={`url(#lgl-${style})`} />
-            {/* Label inner border */}
-            <rect x="102" y="26" width="216" height="208" rx="10"
-              fill="none" stroke="rgba(0,0,0,0.1)" strokeWidth="1" />
-            {/* Label texture lines */}
-            {[52,66,80,94,108,122,136,150,164,178].map(y => (
-              <line key={y} x1="114" y1={y} x2="306" y2={y}
-                stroke="rgba(0,0,0,0.06)" strokeWidth="0.6" />
-            ))}
-
-            {/* Typing pulse glow on label */}
-            {typingPulse && (
-              <rect x="102" y="26" width="216" height="208" rx="10"
-                fill={colors.accent} fillOpacity="0.12"
-                filter="url(#typingGlow)" />
-            )}
-
-            {/* ── TEXT AREA WITH SEMI-TRANSPARENT BACKGROUND ─────────────── */}
-            {/* Background panel behind text — ensures readability over reels */}
-            <rect x="106" y="50" width="208" height="110" rx="6"
-              fill={colors.label} fillOpacity="0.92"
-              stroke="rgba(0,0,0,0.08)" strokeWidth="0.8" />
-            {/* Panel gloss overlay */}
-            <rect x="106" y="50" width="208" height="25" rx="6"
-              fill="white" fillOpacity="0.12" />
-
-            {/* SIDE badge */}
-            <rect x="114" y="34" width="38" height="18" rx="4"
-              fill="rgba(0,0,0,0.45)" />
-            <text x="133" y="46.5" textAnchor="middle"
-              fill={colors.label} fontSize="8.5" fontWeight="700"
-              fontFamily="'Inter', monospace" letterSpacing="1.5"
-              fillOpacity="0.9">
-              SIDE {side}
-            </text>
-
-            {/* Tape title */}
-            <foreignObject x="112" y="58" width="196" height="48">
+            {/* Top label — compact cream paper */}
+            <div
+              style={{
+                margin: "14px 18px 0",
+                background: "linear-gradient(180deg,#f2ede1,#e6ded0)",
+                borderRadius: 2.5,
+                padding: "6px 8px",
+                boxShadow:
+                  "0 2px 6px rgba(0,0,0,0.45), inset 0 -1px 2px rgba(0,0,0,0.08)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              {/* Side badge */}
               <div
-                {...{ xmlns: "http://www.w3.org/1999/xhtml" }}
                 style={{
-                  width: "100%", height: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'Playfair Display', Georgia, serif",
-                  fontStyle: "italic", fontWeight: 700,
-                  fontSize: title.length > 16 ? "14px" : "16px",
-                  color: colors.text,
-                  opacity: 1,
+                  width: 24,
+                  height: 24,
+                  flexShrink: 0,
+                  background: "linear-gradient(180deg,#5a2430,#42101c)",
+                  color: "#f2ede1",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: 700,
+                  fontSize: 14,
+                  borderRadius: 1.5,
+                  boxShadow: "inset 0 1px 1px rgba(255,255,255,0.15), 0 2px 3px rgba(0,0,0,0.3)",
+                }}
+              >
+                {side}
+              </div>
+              <div style={{ flex: 1, borderTop: "1px solid #8a2f2f" }} />
+              <div
+                style={{
+                  fontFamily: "'Caveat', cursive",
+                  fontSize: 19,
+                  fontWeight: 700,
+                  color: "#2a2620",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: 130,
+                }}
+              >
+                {title || "Untitled Tape"}
+              </div>
+            </div>
+
+            {/* Reel window — rich colors, enhanced visual depth */}
+            <div
+              style={{
+                position: "relative",
+                margin: "7px 12px 0",
+                background: "linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 40%, #000 100%)",
+                borderRadius: 5,
+                padding: "12px 10px 10px",
+                boxShadow:
+                  "inset 0 4px 12px rgba(0,0,0,0.95), inset 0 -2px 6px rgba(100,100,100,0.08), 0 1px 3px rgba(0,0,0,0.5)",
+                border: "1px solid #222",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "0 8px",
+                  position: "relative",
+                  height: 60,
+                  gap: 6,
+                }}
+              >
+                {/* Left reel */}
+                <div style={{ position: "relative", zIndex: 3 }}>
+                  {isHydrated && <Reel angle={leftAngle.current} fullness={1 - windRef.current} />}
+                  {!isHydrated && <Reel angle={0} fullness={0.68} />}
+                </div>
+
+                {/* Center tape area - Rich gradient with better visual effects */}
+                <div
+                  style={{
+                    flex: 1,
+                    height: 48,
+                    borderRadius: 4,
+                    position: "relative",
+                    overflow: "hidden",
+                    background:
+                      "linear-gradient(90deg, #0a0a0a 0%, #1a1a1a 12%, #2d2d2d 20%, #353535 25%, #2d2d2d 30%, #1f1f1f 40%, #151515 50%, #1f1f1f 60%, #2d2d2d 70%, #353535 75%, #2d2d2d 80%, #1a1a1a 88%, #0a0a0a 100%)",
+                    boxShadow:
+                      "inset 0 3px 8px rgba(0,0,0,0.85), inset 0 -2px 5px rgba(150,150,150,0.1), inset 0 1px 0 rgba(255,255,255,0.05)",
+                    border: "1px solid #282828",
+                  }}
+                >
+                  {/* Dynamic tape shine - follows playback speed */}
+                  {powerOn && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: "-100%",
+                        right: "-100%",
+                        height: "100%",
+                        background:
+                          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 25%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0.15) 75%, transparent 100%)",
+                        animation: `shine ${0.6 / (mode === "ff" ? 3.5 : 1)}s ease-in-out infinite`,
+                        filter: "blur(1px)",
+                      }}
+                    />
+                  )}
+
+                  {/* Horizontal tape stripes */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      backgroundImage:
+                        "repeating-linear-gradient(90deg, rgba(100,100,100,0.15) 0px, rgba(100,100,100,0.15) 2px, rgba(80,80,80,0.1) 2px, rgba(80,80,80,0.1) 4px)",
+                      pointerEvents: "none",
+                    }}
+                  />
+
+                  {/* Vertical scrolling tape motion lines */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      backgroundImage:
+                        "repeating-linear-gradient(0deg, rgba(120,120,120,0.2) 0px, rgba(120,120,120,0.2) 1px, transparent 1px, transparent 4px)",
+                      animation: powerOn
+                        ? `scrollLines ${0.25 / (mode === "ff" ? 4 : mode === "rewind" ? 4 : 1)}s linear infinite`
+                        : "none",
+                      pointerEvents: "none",
+                    }}
+                  />
+
+                  {/* Top glossy highlight */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: "35%",
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 100%)",
+                      pointerEvents: "none",
+                      borderRadius: "4px 4px 0 0",
+                    }}
+                  />
+
+                  {/* Center warm glow when playing */}
+                  {powerOn && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          mode === "playing"
+                            ? "radial-gradient(ellipse at center, rgba(255,200,100,0.08) 0%, transparent 70%)"
+                            : "radial-gradient(ellipse at center, rgba(255,150,80,0.06) 0%, transparent 70%)",
+                        pointerEvents: "none",
+                        animation: "pulse 2s ease-in-out infinite",
+                      }}
+                    />
+                  )}
+                </div>
+
+                {/* Right reel */}
+                <div style={{ position: "relative", zIndex: 3 }}>
+                  {isHydrated && <Reel angle={rightAngle.current} fullness={windRef.current} />}
+                  {!isHydrated && <Reel angle={0} fullness={0.32} />}
+                </div>
+
+                {/* Overall window gloss */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    borderRadius: 4,
+                    background:
+                      "linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.05) 100%)",
+                    pointerEvents: "none",
+                  }}
+                />
+              </div>
+
+              {/* Keyframe animations */}
+              <style>{`
+                @keyframes shine {
+                  0% { left: -100%; }
+                  100% { left: 100%; }
+                }
+                @keyframes scrollLines {
+                  0% { transform: translateY(0); }
+                  100% { transform: translateY(4px); }
+                }
+                @keyframes pulse {
+                  0%, 100% { opacity: 0.4; }
+                  50% { opacity: 1; }
+                }
+              `}</style>
+            </div>
+
+            {/* Bottom brand stripe */}
+            <div
+              style={{
+                margin: "7px 18px 0",
+                background:
+                  "linear-gradient(90deg,#e8dcb0 0%, #d8c99a 55%, #b9c0c2 78%, #e9edee 100%)",
+                borderRadius: 2,
+                padding: "5px 8px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                boxShadow: "0 1.5px 4px rgba(0,0,0,0.4)",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: "#2a2214",
+                  letterSpacing: 0.5,
+                }}
+              >
+                ◆ TDK
+              </span>
+              <span style={{ fontSize: 8.5, color: "#3a3220", fontWeight: 500 }}>
+                High Bias 70μs
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#4a7a3a" }}>
+                90
+              </span>
+            </div>
+
+            {/* Write-protect tabs */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                margin: "6px 26px 0",
+                padding: "0 2px",
+              }}
+            >
+              <Tab />
+              <Tab />
+              <Screw small style={{ position: "relative" }} />
+              <Tab />
+              <Tab />
+            </div>
+
+            {/* Control deck — compact */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 1px" }}>
+              {/* Power LED */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 2,
+                  marginRight: 1,
+                }}
+              >
+                <div
+                  title="Power"
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: powerOn
+                      ? "radial-gradient(circle at 35% 30%, #ffe29a, #ff9d1f 70%)"
+                      : "radial-gradient(circle at 35% 30%, #5a5650, #302d28 70%)",
+                    boxShadow: powerOn
+                      ? "0 0 6px 1.5px rgba(255,157,31,0.65)"
+                      : "inset 0 1px 2px rgba(0,0,0,0.5)",
+                    transition: "all 150ms ease",
+                  }}
+                />
+                <span style={{ fontSize: 7, letterSpacing: 0.8, color: "#8a8478" }}>
+                  PWR
+                </span>
+              </div>
+
+              {/* Tape counter */}
+              <div
+                style={{
+                  background: "linear-gradient(180deg,#0c0c0c,#000)",
+                  color: "#d8cf9e",
+                  fontFamily: "'Oswald', monospace",
+                  fontSize: 13,
+                  letterSpacing: 3,
+                  padding: "4px 7px",
+                  borderRadius: 3,
+                  minWidth: 50,
                   textAlign: "center",
-                  padding: "0 6px", overflow: "hidden", lineHeight: "1.3",
-                  textShadow: "0 1px 2px rgba(255,255,255,0.3)",
+                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.9)",
                 }}
               >
-                {title.length > 24 ? title.slice(0, 24) + "…" : title || "Untitled Tape"}
+                {String(counter).padStart(3, "0")}
               </div>
-            </foreignObject>
 
-            {/* FOR [RECIPIENT] */}
-            <foreignObject x="112" y="108" width="196" height="22">
-              <div
-                {...{ xmlns: "http://www.w3.org/1999/xhtml" }}
-                style={{
-                  width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'Inter', monospace",
-                  fontSize: "9px", letterSpacing: "2px",
-                  color: colors.text, opacity: 0.8, textAlign: "center",
-                  textTransform: "uppercase",
-                  fontWeight: 600,
-                }}
-              >
-                FOR {(recipientName || "Someone").toUpperCase().slice(0, 20)}
+              <div style={{ flex: 1 }} />
+
+              {/* Flip button */}
+              {showFlipButton && (
+                <button
+                  onClick={handleFlip}
+                  aria-label="Flip cassette to other side"
+                  style={{
+                    background: "linear-gradient(180deg,#f7f0dc,#e6d9b8)",
+                    border: "1px solid #9c8a5c",
+                    borderRadius: 999,
+                    padding: "4px 10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "#3a3220",
+                    cursor: "pointer",
+                    boxShadow:
+                      "0 1.5px 0 rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.7)",
+                    transition: "transform 100ms ease",
+                    minHeight: "36px",
+                    touchAction: "manipulation",
+                  }}
+                  onMouseDown={(e) => (e.currentTarget.style.transform = "translateY(1px)")}
+                  onMouseUp={(e) => (e.currentTarget.style.transform = "translateY(0)")}
+                >
+                  <span style={{ fontSize: 12 }}>↻</span> Flip
+                </button>
+              )}
+
+              {/* Control buttons */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, flex: 2 }}>
+                <DeckButton label="RW" active={localMode === "rewind"} onClick={handleRewindClick}>
+                  ⏮
+                </DeckButton>
+                <DeckButton label="▶ Play" onClick={handlePlayClick} active={localMode === "playing"}>
+                  ⏯
+                </DeckButton>
+                <DeckButton label="FF" active={localMode === "ff"} onClick={handleFFClick}>
+                  ⏭
+                </DeckButton>
+                <DeckButton label="Stop" onClick={handleStopClick}>
+                  ⏹
+                </DeckButton>
               </div>
-            </foreignObject>
+            </div>
 
-            {/* Divider line */}
-            <line x1="126" y1="134" x2="294" y2="134"
-              stroke="rgba(0,0,0,0.15)" strokeWidth="1" />
-
-            {/* FROM [SENDER] — moved and styled for visibility */}
-            <foreignObject x="112" y="138" width="196" height="18">
-              <div
-                {...{ xmlns: "http://www.w3.org/1999/xhtml" }}
-                style={{
-                  width: "100%",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "'Inter', monospace",
-                  fontSize: "8px", letterSpacing: "1.5px",
-                  color: colors.text, opacity: 0.75, textAlign: "center",
-                  textTransform: "uppercase",
-                  fontWeight: 500,
-                }}
-              >
-                FROM {(senderName || "").toUpperCase().slice(0, 18)}
-              </div>
-            </foreignObject>
-
-            {/* CASSETTE wordmark */}
-            <text x="210" y="218" textAnchor="middle"
-              fill={colors.text} fontSize="6.5" letterSpacing="3.5" fontFamily="'Inter', monospace"
-              fillOpacity="0.28">
-              C A S S E T T E
-            </text>
-
-            {/* ── TAPE WINDOW ──────────────────────────────────────────────── */}
-            {/* Window bezel */}
-            <rect x="168" y="140" width="84" height="46" rx="7"
-              fill={colors.shellGradBot} stroke="rgba(0,0,0,0.25)" strokeWidth="1.5" />
-            {/* Window glass — dark */}
-            <rect x="170" y="142" width="80" height="42" rx="6"
-              fill={colors.windowTint} fillOpacity="0.5" />
-            {/* Window inner shadow */}
-            <rect x="170" y="142" width="80" height="6" rx="3"
-              fill="rgba(0,0,0,0.25)" />
-            {/* Window top gloss */}
-            <rect x="171" y="143" width="78" height="4" rx="2"
-              fill="white" fillOpacity="0.07" />
-
-            {/* ── TAPE RIBBON ─────────────────────────────────────────────── */}
-            <rect x="170" y="158" width="80" height="10" fill={`url(#tr-${style})`} opacity="0.95" />
-            <rect x="170" y="158" width="80" height="1.5" fill={colors.accent} fillOpacity="0.3" />
-            <rect x="170" y="167" width="80" height="1" fill="rgba(0,0,0,0.3)" />
-            <rect x="170" y="159" width="80" height="2" fill="white" fillOpacity="0.08" />
-
-            {/* ── LEFT REEL ───────────────────────────────────────────────── */}
-            <motion.g
-              animate={reelState()}
-              variants={reelVariantsLeft}
-              style={{ originX: "125px", originY: "130px" }}
+            <div
+              style={{
+                textAlign: "center",
+                fontSize: 7,
+                letterSpacing: 0.8,
+                color: "#8a8478",
+                marginTop: 0,
+                paddingBottom: 1,
+              }}
             >
-              {/* Outer ring */}
-              <circle cx="125" cy="130" r="56" fill="rgba(0,0,0,0.15)" />
-              <circle cx="125" cy="130" r="54"
-                fill={colors.shell} stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+              COUNTER
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-              {/* Tape wound rings — more = fuller reel */}
-              {Array.from({ length: Math.max(2, Math.round((1 - progress) * 8)) }).map((_, i) => (
-                <circle key={i} cx="125" cy="130"
-                  r={leftThickness + i * 2.4}
-                  fill="none"
-                  stroke={colors.windowTint}
-                  strokeWidth="2"
-                  strokeOpacity={0.55 - i * 0.05} />
-              ))}
+function DeckButton({
+  children,
+  label,
+  active = false,
+  onClick,
+}: {
+  children: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  const [pressed, setPressed] = useState(false);
 
-              {/* Hub outer */}
-              <circle cx="125" cy="130" r="22" fill={`url(#rg-${style})`} />
-              {/* Hub face */}
-              <circle cx="125" cy="130" r="14" fill={colors.shellGradBot} />
+  return (
+    <div
+      role="button"
+      aria-label={label}
+      onClick={onClick}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => setPressed(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
+      style={{
+        height: 30,
+        borderRadius: 6,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 12,
+        cursor: "pointer",
+        userSelect: "none",
+        color: active ? "#f0e9c9" : "#c9c3b3",
+        background: active
+          ? "linear-gradient(180deg,#4a4020,#2a2410)"
+          : "linear-gradient(180deg,#2e2e2e,#181818)",
+        border: "1px solid #3a3a3a",
+        boxShadow: pressed
+          ? "inset 0 2px 4px rgba(0,0,0,0.6)"
+          : active
+          ? "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.08)"
+          : "0 1.5px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+        transition: "all 90ms ease",
+        minHeight: "36px",
+        touchAction: "manipulation",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
-              {/* Spokes */}
-              {[0, 60, 120, 180, 240, 300].map(angle => {
-                const rad = (angle * Math.PI) / 180;
-                const x1 = +(125 + Math.cos(rad) * 14).toFixed(3);
-                const y1 = +(130 + Math.sin(rad) * 14).toFixed(3);
-                const x2 = +(125 + Math.cos(rad) * 22).toFixed(3);
-                const y2 = +(130 + Math.sin(rad) * 22).toFixed(3);
-                return (
-                  <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke={colors.accent} strokeWidth="2.5"
-                    strokeOpacity="0.7" strokeLinecap="round" />
-                );
-              })}
+function Screw({ style, small }: { style?: React.CSSProperties; small?: boolean }) {
+  const s = small ? 11 : 15;
+  return (
+    <div
+      style={{
+        width: s,
+        height: s,
+        borderRadius: "50%",
+        background: "radial-gradient(circle at 32% 30%, #f2e8cd, #a2915f 55%, #6e5f3a)",
+        border: "1px solid #5c4f30",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.4), inset 0 -1px 1px rgba(0,0,0,0.3)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        ...style,
+      }}
+    >
+      <div style={{ width: s * 0.6, height: 1.2, background: "#5c4f30", position: "absolute" }} />
+      <div
+        style={{
+          width: s * 0.6,
+          height: 1.2,
+          background: "#5c4f30",
+          position: "absolute",
+          transform: "rotate(90deg)",
+        }}
+      />
+    </div>
+  );
+}
 
-              {/* Centre */}
-              <circle cx="125" cy="130" r="5.5"
-                fill={colors.shellGradBot} stroke="rgba(0,0,0,0.2)" strokeWidth="0.8" />
-              {/* Specular */}
-              <circle cx="123" cy="128" r="2" fill="white" fillOpacity="0.2" />
-            </motion.g>
+function Tab() {
+  return (
+    <div
+      style={{
+        width: 20,
+        height: 12,
+        borderRadius: "2px 2px 0 0",
+        background: "linear-gradient(180deg,#d8d4c8,#a8a498)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4)",
+      }}
+    />
+  );
+}
 
-            {/* ── RIGHT REEL ──────────────────────────────────────────────── */}
-            <motion.g
-              animate={reelState()}
-              variants={reelVariantsRight}
-              style={{ originX: "295px", originY: "130px" }}
-            >
-              <circle cx="295" cy="130" r="56" fill="rgba(0,0,0,0.15)" />
-              <circle cx="295" cy="130" r="54"
-                fill={colors.shell} stroke="rgba(0,0,0,0.12)" strokeWidth="1" />
+function Reel({ angle, fullness }: { angle: number; fullness: number }) {
+  const tapeOuterR = 8 + fullness * 12;
 
-              {Array.from({ length: Math.max(2, Math.round(progress * 8)) }).map((_, i) => (
-                <circle key={i} cx="295" cy="130"
-                  r={rightThickness + i * 2.4}
-                  fill="none"
-                  stroke={colors.windowTint}
-                  strokeWidth="2"
-                  strokeOpacity={0.55 - i * 0.05} />
-              ))}
+  return (
+    <div
+      style={{
+        width: 58,
+        height: 58,
+        borderRadius: "50%",
+        background: "radial-gradient(circle at 35% 35%, #e8e4d8 0%, #d4cfc0 20%, #c0b8a8 28%, #1a1a1a 32%)",
+        boxShadow:
+          "inset 0 0 0 2.5px #0a0a0a, inset 0 4px 10px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.6)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+      }}
+    >
+      <div style={{ width: 46, height: 46, borderRadius: "50%", position: "relative" }}>
+        {/* Tape winding visualization */}
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            width: tapeOuterR * 2,
+            height: tapeOuterR * 2,
+            borderRadius: "50%",
+            transform: "translate(-50%,-50%)",
+            background:
+              "repeating-conic-gradient(from 0deg, #0a0a0a 0deg 6deg, #1a1812 6deg 8deg)",
+            boxShadow: "inset 0 0 8px rgba(0,0,0,0.9), inset 0 2px 4px rgba(0,0,0,0.7)",
+          }}
+        />
 
-              <circle cx="295" cy="130" r="22" fill={`url(#rg-${style})`} />
-              <circle cx="295" cy="130" r="14" fill={colors.shellGradBot} />
-
-              {[0, 60, 120, 180, 240, 300].map(angle => {
-                const rad = (angle * Math.PI) / 180;
-                const x1 = +(295 + Math.cos(rad) * 14).toFixed(3);
-                const y1 = +(130 + Math.sin(rad) * 14).toFixed(3);
-                const x2 = +(295 + Math.cos(rad) * 22).toFixed(3);
-                const y2 = +(130 + Math.sin(rad) * 22).toFixed(3);
-                return (
-                  <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2}
-                    stroke={colors.accent} strokeWidth="2.5"
-                    strokeOpacity="0.7" strokeLinecap="round" />
-                );
-              })}
-
-              <circle cx="295" cy="130" r="5.5"
-                fill={colors.shellGradBot} stroke="rgba(0,0,0,0.2)" strokeWidth="0.8" />
-              <circle cx="293" cy="128" r="2" fill="white" fillOpacity="0.2" />
-            </motion.g>
-
-            {/* ── GRIP BUMPS on sides ──────────────────────────────────────── */}
-            {[55, 88, 121, 154, 187].map((y, i) => (
-              <g key={i}>
-                <rect x="4" y={y} width="6" height="12" rx="2"
-                  fill={colors.shellGradBot} fillOpacity="0.7" />
-                <rect x="4" y={y} width="2" height="12" rx="1"
-                  fill="white" fillOpacity="0.1" />
-                <rect x="410" y={y} width="6" height="12" rx="2"
-                  fill={colors.shellGradBot} fillOpacity="0.7" />
-              </g>
-            ))}
-
-            {/* ── RECORDING STATE INDICATOR ─────────────────────────────── */}
-            {(cassetteState === "recording") && (
-              <motion.circle
-                cx="378" cy="44" r="5"
-                fill="#FF3020"
-                animate={{ opacity: [1, 0.2, 1], r: [5, 6, 5] }}
-                transition={{ duration: 0.7, repeat: Infinity }}
-              />
-            )}
-          </svg>
-
-          {/* Pointer-driven ambient specular — outside SVG */}
-          <motion.div
-            className="absolute inset-0 rounded-3xl pointer-events-none"
+        {/* Rotating hub with spokes */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            transform: `rotate(${angle}deg)`,
+          }}
+        >
+          {/* Hub center - metallic */}
+          <div
             style={{
-              background: `radial-gradient(ellipse at 38% 18%, ${colors.specular}16 0%, transparent 58%)`,
-              mixBlendMode: "screen",
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: 22,
+              height: 22,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle at 35% 35%, #f0ead8 0%, #d8cfc0 40%, #b0a890 70%, #8a7868 100%)",
+              transform: "translate(-50%,-50%)",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.2)",
             }}
           />
-        </motion.div>
 
-        {/* ── FLIP BUTTON ────────────────────────────────────────────────── */}
-        {onFlipSide && showFlipButton && (
-          <motion.button
-            onClick={() => {
-              playFlipSound();
-              onFlipSide();
-            }}
-            className="absolute top-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium tracking-wide border"
+          {/* Prominent spokes - 8 for better visual effect */}
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                width: 16,
+                height: 5,
+                background: "linear-gradient(180deg, #2a2420 0%, #0a0a0a 50%, #000 100%)",
+                borderRadius: 2.5,
+                transform: `translate(-50%,-50%) rotate(${i * 45}deg) translateX(12px)`,
+                boxShadow: "0 1px 2px rgba(0,0,0,0.8)",
+              }}
+            />
+          ))}
+
+          {/* Center spindle */}
+          <div
             style={{
-              background: "rgba(255,255,255,0.88)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              borderColor: "rgba(0,0,0,0.1)",
-              color: "#1D1D1F",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-              fontFamily: "var(--font-inter, Inter, sans-serif)",
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "radial-gradient(circle at 30% 30%, #1a1a1a, #000)",
+              transform: "translate(-50%,-50%)",
+              boxShadow: "inset 0 1px 2px rgba(255,255,255,0.08)",
             }}
-            whileHover={{ scale: 1.04, boxShadow: "0 4px 12px rgba(0,0,0,0.14)" }}
-            whileTap={{ scale: 0.93, y: 1 }}
-            transition={{ type: "spring", stiffness: 320, damping: 18 }}
-            aria-label={`Side ${side} playing. Tap to flip to Side ${side === "A" ? "B" : "A"}`}
-          >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M1 5a4 4 0 1 1 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M5 9L3 7l2-2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Flip
-          </motion.button>
-        )}
-      </motion.div>
-    </AnimatePresence>
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TapeGleam({ active }: { active: boolean }) {
+  return (
+    <div
+      style={{
+        width: 22,
+        height: 38,
+        borderRadius: 2,
+        background: active
+          ? "linear-gradient(115deg, #1a1a1a 0%, #3a3a3a 30%, #d8d4c8 48%, #3a3a3a 65%, #1a1a1a 100%)"
+          : "linear-gradient(115deg, #141414 0%, #1e1e1e 45%, #3a3a3a 55%, #1e1e1e 100%)",
+        boxShadow: "inset 0 0 3px rgba(0,0,0,0.6)",
+        transition: "background 250ms ease",
+      }}
+    />
   );
 }

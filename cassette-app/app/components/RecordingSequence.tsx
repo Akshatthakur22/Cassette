@@ -17,7 +17,7 @@ interface RecordingSequenceProps {
   onComplete: () => void;
 }
 
-const TOTAL_DURATION = 7500; // ms — slightly longer for enhanced visuals
+const TOTAL_DURATION = 9500; // Extended for more cinematic feel
 
 export default function RecordingSequence({
   tracks,
@@ -57,32 +57,32 @@ export default function RecordingSequence({
       let reel0Spin = 0;
       let reel1Spin = 0;
 
-      // Analog counter — ticks up to ~250+ over recording
+      // Analog counter — ticks up faster for more dynamic feel
       counterRef.current = setInterval(() => {
-        count += Math.floor(Math.random() * 5) + 1;
-        setCounter(Math.min(count, 280));
-      }, 70);
+        count += Math.floor(Math.random() * 8) + 2;
+        setCounter(Math.min(count, 320));
+      }, 50);
 
-      // VU meter — more realistic audio simulation
+      // VU meter — more realistic with dynamic peaks
       vuRef.current = setInterval(() => {
-        const left = 0.2 + Math.random() * 0.75;
-        const right = 0.25 + Math.random() * 0.70;
+        const left = 0.15 + Math.random() * 0.80;
+        const right = 0.20 + Math.random() * 0.75;
         const peak = Math.max(left, right);
         
         setVuLevels([left, right]);
         setPeakLevel(peak);
-      }, 100);
+      }, 80);
 
-      // Progress tracker
+      // Progress tracker with faster updates
       progressRef.current = setInterval(() => {
-        progressVal += Math.random() * 8 + 2;
+        progressVal += Math.random() * 10 + 3;
         setProgress(Math.min(progressVal, 100));
         
-        // Tape spool animation — both reels accumulate tape
-        reel0Spin += Math.random() * 12 + 5;
-        reel1Spin += Math.random() * 8 + 3;
+        // Tape spool animation — more aggressive tape buildup
+        reel0Spin += Math.random() * 16 + 8;
+        reel1Spin += Math.random() * 12 + 6;
         setTapeSpinAmount([reel0Spin % 360, reel1Spin % 360]);
-      }, 120);
+      }, 100);
 
       // Track flash — each track title appears briefly
       let trackIdx = 0;
@@ -145,6 +145,25 @@ export default function RecordingSequence({
       className="fixed inset-0 z-50 flex flex-col items-center justify-center px-3 sm:px-4 md:px-6 py-6 md:py-0 overflow-y-auto"
       style={{ background: "#FBFAF7" }}
     >
+      {/* Animated tape strip header */}
+      <motion.div
+        className="absolute top-0 left-0 right-0 h-1.5 overflow-hidden"
+        animate={phase === "recording" ? { y: [0, -2, 0] } : {}}
+        transition={phase === "recording" ? { duration: 0.8, repeat: Infinity } : {}}
+      >
+        <motion.div
+          className="h-full"
+          animate={phase === "recording" ? { 
+            backgroundPosition: ["0% 0%", "200% 0%"],
+          } : {}}
+          transition={phase === "recording" ? { duration: 0.6, repeat: Infinity, ease: "linear" } : {}}
+          style={{
+            background: "repeating-linear-gradient(90deg, #D4A76A 0px, #D4A76A 8px, #987830 8px, #987830 16px, #C89850 16px, #C89850 24px)",
+            backgroundSize: "200% 100%",
+            boxShadow: phase === "recording" ? "0 0 8px rgba(212,136,42,0.4)" : "none",
+          }}
+        />
+      </motion.div>
       {/* Scattered poster decoration */}
       <div className="absolute top-10 left-4 z-0 opacity-55 hidden lg:block">
         <PosterImage imageNumber={18} width={70} height={100} rotation={-15} />
@@ -202,10 +221,10 @@ export default function RecordingSequence({
             {/* Spinning reels with tape winding visualization — responsive size */}
             <div className="absolute inset-0 flex items-center justify-between" style={{ padding: "clamp(8px, 5vw, 32px)" }}>
               {[0, 1].map((i) => {
-                const reelDuration = i === 0 ? 1.2 : 1.8;
-                const wobbleAmount = 1.5 + i * 0.3;
-                const tapeLayers = Math.floor(tapeSpinAmount[i] / 45);
-                const reelSize = Math.min(72, Math.max(56, window.innerWidth < 640 ? 56 : 72));
+                const reelDuration = i === 0 ? 0.8 : 1.1; // Faster, realistic spinning
+                const wobbleAmount = 2.2 + i * 0.5; // More pronounced wobble for mechanical feel
+                const tapeLayers = Math.floor(tapeSpinAmount[i] / 35); // More visible tape buildup
+                const reelSize = Math.min(80, Math.max(64, window.innerWidth < 640 ? 64 : 80));
                 
                 return (
                   <motion.div
@@ -214,70 +233,136 @@ export default function RecordingSequence({
                       phase === "recording"
                         ? { 
                             rotate: 360,
-                            y: [0, wobbleAmount * 0.6, -wobbleAmount * 0.4, wobbleAmount * 0.25, 0],
-                            x: [0, wobbleAmount * 0.4, -wobbleAmount * 0.35, wobbleAmount * 0.2, 0],
+                            y: [0, wobbleAmount * 0.8, -wobbleAmount * 0.5, wobbleAmount * 0.3, 0],
+                            x: [0, wobbleAmount * 0.5, -wobbleAmount * 0.4, wobbleAmount * 0.25, 0],
                           }
                         : phase === "engage"
-                        ? { rotate: 120 }
+                        ? { rotate: [0, 180, 360], scale: [0.95, 1.0, 0.95] }
+                        : phase === "stopping"
+                        ? { rotate: [360, 90, 0], scale: [1, 1.05, 1], y: [0, -2, 0] }
                         : { rotate: 0 }
                     }
                     transition={
                       phase === "recording"
                         ? { 
                             rotate: { duration: reelDuration, repeat: Infinity, ease: "linear" },
-                            y: { duration: 0.7, repeat: Infinity, ease: "easeInOut" },
-                            x: { duration: 0.8, repeat: Infinity, ease: "easeInOut" },
+                            y: { duration: 0.6, repeat: Infinity, ease: "easeInOut" },
+                            x: { duration: 0.7, repeat: Infinity, ease: "easeInOut" },
                           }
+                        : phase === "engage"
+                        ? { duration: 0.8, ease: "easeOut" }
+                        : phase === "stopping"
+                        ? { duration: 0.9, ease: "easeInOut" }
                         : { duration: 0.5, ease: "easeOut" }
                     }
-                    className="relative flex-shrink-0"
-                    style={{ width: reelSize, height: reelSize }}
+                    className="relative flex-shrink-0 drop-shadow-lg"
+                    style={{ 
+                      width: reelSize, 
+                      height: reelSize,
+                      filter: recOn ? "drop-shadow(0 0 12px rgba(212,136,42,0.4))" : "drop-shadow(0 2px 8px rgba(0,0,0,0.1))",
+                    }}
                   >
-                    {/* Reel outer — base — responsive SVG */}
-                    <svg viewBox="0 0 72 72" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
-                      {/* Tape layers buildup */}
-                      {phase === "recording" && Array.from({ length: Math.min(tapeLayers, 6) }).map((_, layer) => (
+                    {/* Tape layers buildup - more visible and dynamic */}
+                    {phase === "recording" && Array.from({ length: Math.min(tapeLayers, 8) }).map((_, layer) => (
+                      <g key={`tape-${layer}`}>
                         <circle
-                          key={`tape-${layer}`}
                           cx="36"
                           cy="36"
-                          r={26 + layer * 2.5}
+                          r={24 + layer * 3}
                           fill="none"
                           stroke="#D4A76A"
-                          strokeWidth="0.8"
-                          opacity={0.5 - layer * 0.08}
+                          strokeWidth={0.6 + layer * 0.15}
+                          opacity={Math.max(0.2, 0.6 - layer * 0.08)}
+                          style={{
+                            filter: `drop-shadow(0 0 ${2 + layer}px rgba(212,136,42,0.3))`,
+                          }}
                         />
-                      ))}
+                        {/* Tape texture lines */}
+                        {layer % 2 === 0 && (
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={24 + layer * 3 - 0.5}
+                            fill="none"
+                            stroke="#C89850"
+                            strokeWidth={0.3}
+                            opacity={0.4}
+                            strokeDasharray="2,1"
+                          />
+                        )}
+                      </g>
+                    ))}
 
-                      {/* Reel hub */}
-                      <circle cx="36" cy="36" r="32" fill="#C8A870" stroke="#A07840" strokeWidth="1.2" />
-                      <circle cx="36" cy="36" r="22" fill="#B89050" />
-                      <circle cx="36" cy="36" r="11" fill="#987830" />
-                      <circle cx="36" cy="36" r="6" fill="#7A6020" />
+                    {/* Main SVG reel */}
+                    <svg viewBox="0 0 72 72" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+                      {/* Outer ring - metallic shine */}
+                      <defs>
+                        <radialGradient id={`reelGradient${i}`} cx="40%" cy="40%">
+                          <stop offset="0%" style={{ stopColor: "#D9B880", stopOpacity: 1 }} />
+                          <stop offset="70%" style={{ stopColor: "#B89050", stopOpacity: 1 }} />
+                          <stop offset="100%" style={{ stopColor: "#8A6030", stopOpacity: 1 }} />
+                        </radialGradient>
+                        <filter id={`glow${i}`}>
+                          <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                          <feMerge>
+                            <feMergeNode in="coloredBlur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
+                        </filter>
+                      </defs>
 
-                      {/* Spokes — glowing when spinning */}
-                      {[0, 60, 120, 180, 240, 300].map((angle) => {
+                      {/* Base reel - more dimensional */}
+                      <circle cx="36" cy="36" r="34" fill={`url(#reelGradient${i})`} stroke="#6A4820" strokeWidth="1.5" filter={`url(#glow${i})`} />
+                      
+                      {/* Center hub - metallic */}
+                      <circle cx="36" cy="36" r="24" fill="#C8A870" stroke="#A07840" strokeWidth="1.5" />
+                      <circle cx="36" cy="36" r="18" fill="#B89050" />
+                      <circle cx="36" cy="36" r="12" fill="#987830" />
+                      <circle cx="36" cy="36" r="7" fill="#7A6020" stroke="#5A4010" strokeWidth="0.8" />
+
+                      {/* Dynamic spokes - glow effect when recording */}
+                      {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
                         const rad = (angle * Math.PI) / 180;
-                        const x1 = +(36 + Math.cos(rad) * 11).toFixed(2);
-                        const y1 = +(36 + Math.sin(rad) * 11).toFixed(2);
-                        const x2 = +(36 + Math.cos(rad) * 22).toFixed(2);
-                        const y2 = +(36 + Math.sin(rad) * 22).toFixed(2);
+                        const x1 = +(36 + Math.cos(rad) * 7).toFixed(2);
+                        const y1 = +(36 + Math.sin(rad) * 7).toFixed(2);
+                        const x2 = +(36 + Math.cos(rad) * 28).toFixed(2);
+                        const y2 = +(36 + Math.sin(rad) * 28).toFixed(2);
                         return (
                           <line
                             key={angle}
                             x1={x1} y1={y1} x2={x2} y2={y2}
-                            stroke="#D4882A"
-                            strokeWidth="2.8"
+                            stroke={recOn ? "#E8A840" : "#D4882A"}
+                            strokeWidth={recOn ? "3.2" : "2.4"}
                             strokeLinecap="round"
-                            opacity={recOn ? 0.9 : 0.5}
+                            opacity={recOn ? 1 : 0.7}
+                            style={{
+                              filter: recOn ? `url(#glow${i})` : "none",
+                              transition: "opacity 0.4s infinite",
+                            }}
                           />
                         );
                       })}
 
-                      {/* Rings — indicate tape position */}
-                      {[24, 27, 30].map((r) => (
-                        <circle key={r} cx="36" cy="36" r={r} fill="none" stroke="#80600A" strokeWidth="0.8" opacity="0.25" />
+                      {/* Concentric rings - tape position indicators */}
+                      {[20, 25, 30].map((r) => (
+                        <circle
+                          key={`ring-${r}`}
+                          cx="36"
+                          cy="36"
+                          r={r}
+                          fill="none"
+                          stroke="#80600A"
+                          strokeWidth="0.6"
+                          opacity={recOn ? 0.5 : 0.25}
+                          style={{
+                            animation: recOn ? `pulse-ring 1.2s infinite` : "none",
+                            animationDelay: `${r * 0.05}s`,
+                          }}
+                        />
                       ))}
+
+                      {/* Center spindle highlight */}
+                      <circle cx="36" cy="36" r="6" fill="none" stroke="#F5E6D3" strokeWidth="1" opacity="0.6" />
                     </svg>
                   </motion.div>
                 );
@@ -311,11 +396,18 @@ export default function RecordingSequence({
               </div>
             </div>
 
-            {/* Tape strip visible through bay */}
-            <div
-              className="absolute bottom-0 left-0 right-0 h-[6px]"
+            {/* Tape strip visible through bay - animated motion */}
+            <motion.div
+              className="absolute bottom-0 left-0 right-0 h-[8px]"
+              animate={recOn ? { 
+                backgroundPosition: ["0% 0%", "100% 0%"],
+                opacity: [0.8, 1, 0.8]
+              } : {}}
+              transition={recOn ? { duration: 0.5, repeat: Infinity } : {}}
               style={{
-                background: "linear-gradient(90deg, #C8A870, #987830, #C8A870)",
+                background: "linear-gradient(90deg, #C8A870 0%, #987830 25%, #D4A76A 50%, #987830 75%, #C8A870 100%)",
+                backgroundSize: "200% 100%",
+                boxShadow: recOn ? "0 0 12px rgba(212,136,42,0.5), inset 0 2px 4px rgba(255,255,255,0.3)" : "none",
               }}
             />
           </div>
@@ -334,31 +426,42 @@ export default function RecordingSequence({
                 </div>
                 
                 {/* VU meter background with markers */}
-                <div className="relative h-2 sm:h-3 rounded-full overflow-hidden" style={{ background: "#E8E0D0" }}>
+                <div
+                  className="relative h-2 sm:h-3 rounded-full overflow-hidden"
+                  style={{ 
+                    background: "linear-gradient(90deg, #E8E0D0 0%, #F5EDE5 50%, #E8E0D0 100%)",
+                    border: "1px solid #D9D7D1",
+                    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.05)"
+                  }}
+                >
                   {/* Markers */}
                   <div className="absolute inset-0 flex" style={{ pointerEvents: "none" }}>
                     {[0.25, 0.5, 0.75].map((pos) => (
                       <div
                         key={pos}
                         className="h-full w-px"
-                        style={{ left: `${pos * 100}%`, background: "rgba(0,0,0,0.1)" }}
+                        style={{ left: `${pos * 100}%`, background: "rgba(212,136,42,0.2)" }}
                       />
                     ))}
                   </div>
 
-                  {/* Level bar */}
+                  {/* Animated level bar with glow */}
                   <motion.div
                     className="h-full rounded-full"
                     animate={{ width: `${level * 100}%` }}
-                    transition={{ duration: 0.12, ease: "linear" }}
+                    transition={{ duration: 0.1, ease: "linear" }}
                     style={{
                       background:
                         level > 0.85
-                          ? "linear-gradient(90deg, #FF4500 0%, #FF2020 100%)"
+                          ? "linear-gradient(90deg, #FF4500 0%, #FF6B35 50%, #FF2020 100%)"
                           : level > 0.65
-                          ? "linear-gradient(90deg, #FFB800 0%, #D4882A 100%)"
-                          : "linear-gradient(90deg, #34C759 0%, #5B7FA6 100%)",
-                      boxShadow: level > 0.8 ? "0 0 8px rgba(255,32,32,0.6)" : "none",
+                          ? "linear-gradient(90deg, #FFB800 0%, #D4882A 50%, #FF9500 100%)"
+                          : "linear-gradient(90deg, #34C759 0%, #5B7FA6 50%, #0A84FF 100%)",
+                      boxShadow: level > 0.8 
+                        ? "0 0 12px rgba(255,32,32,0.8), inset 0 1px 2px rgba(255,255,255,0.4)"
+                        : level > 0.6
+                        ? "0 0 8px rgba(212,136,42,0.6), inset 0 1px 2px rgba(255,255,255,0.3)"
+                        : "inset 0 1px 2px rgba(255,255,255,0.3)",
                     }}
                   />
 
@@ -547,8 +650,12 @@ export default function RecordingSequence({
         </div>
         
         <div
-          className="relative h-0.5 sm:h-1 rounded-full overflow-hidden"
-          style={{ background: "#E8E0D0", border: "1px solid #D9D7D1" }}
+          className="relative h-1 sm:h-1.5 rounded-full overflow-hidden"
+          style={{ 
+            background: "#E8E0D0", 
+            border: "1px solid #D9D7D1",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.1)"
+          }}
         >
           <motion.div
             className="h-full rounded-full"
@@ -556,18 +663,34 @@ export default function RecordingSequence({
             transition={{ duration: 0.2, ease: "linear" }}
             style={{
               background: phase === "done"
-                ? "linear-gradient(90deg, #34C759 0%, #28A858 100%)"
+                ? "linear-gradient(90deg, #34C759 0%, #28A858 50%, #34C759 100%)"
                 : phase === "stopping"
-                ? "linear-gradient(90deg, #FFB800 0%, #D4882A 100%)"
+                ? "linear-gradient(90deg, #FFB800 0%, #D4882A 50%, #FFB800 100%)"
                 : phase === "recording"
-                ? "linear-gradient(90deg, #D4882A 0%, #E8901A 50%, #C4503A 100%)"
+                ? "linear-gradient(90deg, #D4882A 0%, #E8901A 35%, #FF6B35 70%, #C4503A 100%)"
                 : "linear-gradient(90deg, #5B7FA6 0%, #38A8E8 100%)",
               boxShadow:
                 phase === "recording"
-                  ? "0 0 8px rgba(212,136,42,0.6), inset 0 1px 1px rgba(255,255,255,0.3)"
-                  : "inset 0 1px 1px rgba(255,255,255,0.2)",
+                  ? "0 0 12px rgba(212,136,42,0.8), inset 0 1px 2px rgba(255,255,255,0.4), 0 0 24px rgba(212,136,42,0.3)"
+                  : phase === "done"
+                  ? "0 0 10px rgba(52,199,89,0.6), inset 0 1px 2px rgba(255,255,255,0.3)"
+                  : "inset 0 1px 2px rgba(255,255,255,0.2)",
+              filter: phase === "recording" ? "drop-shadow(0 0 4px rgba(212,136,42,0.5))" : "none",
             }}
           />
+          
+          {/* Animated shine effect */}
+          {phase === "recording" && (
+            <motion.div
+              className="absolute inset-0 rounded-full"
+              animate={{ x: ["-100%", "100%"] }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+              style={{
+                background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)",
+                width: "30%",
+              }}
+            />
+          )}
         </div>
 
         {/* Phase indicators below */}

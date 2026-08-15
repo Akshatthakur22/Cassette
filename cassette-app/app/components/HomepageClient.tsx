@@ -61,11 +61,17 @@ function TopNav() {
 
           {/* Desktop nav links — hidden on mobile */}
           <nav className="hidden sm:flex items-center gap-4 md:gap-6" aria-label="Main navigation">
+            <Link href="/shelf"
+              className="text-sm font-medium transition-colors"
+              style={{ color: "#5F6065", fontFamily: "var(--font-inter, Inter, sans-serif)" }}
+            >
+              Public Shelf
+            </Link>
             <Link href="/"
               className="text-sm font-medium transition-colors"
               style={{ color: "#5F6065", fontFamily: "var(--font-inter, Inter, sans-serif)" }}
             >
-              The Shelf
+              Home
             </Link>
             <Link href="/create"
               className="text-sm font-medium transition-colors"
@@ -153,7 +159,7 @@ function HeroSection() {
         >
           {/* Browse shelf CTA */}
           <a
-            href="#shelf"
+            href="/shelf"
             className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 sm:py-3 rounded-full transition-all hover:opacity-90 active:scale-95"
             style={{
               background: "#FFFBF0",
@@ -169,7 +175,7 @@ function HeroSection() {
             }}
           >
             <span>📼</span>
-            <span>See shelf</span>
+            <span>Explore Public Shelf</span>
           </a>
 
           {/* Create CTA */}
@@ -223,23 +229,183 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ─── Discover & Share Section ────────────────────────────────────────── */
+function DiscoverShareSection() {
+  return (
+    <section className="relative w-full py-14 sm:py-20" style={{ background: "#FFFBF0" }}>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative z-10">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-12"
+        >
+          <p
+            className="tracking-widest uppercase mb-3"
+            style={{
+              fontSize: "10px",
+              fontFamily: "var(--font-inter, Inter, sans-serif)",
+              color: "#8A7A68",
+              letterSpacing: "0.22em",
+            }}
+          >
+            Beyond Private
+          </p>
+          <h2
+            style={{
+              fontFamily: "var(--font-playfair, 'Playfair Display', Georgia, serif)",
+              fontWeight: 900,
+              fontStyle: "italic",
+              fontSize: "clamp(28px, 5vw, 48px)",
+              lineHeight: 1.15,
+              color: "#1C140A",
+              marginBottom: "16px",
+            }}
+          >
+            Share Your Vibe Publicly
+          </h2>
+          <p
+            style={{
+              fontSize: "16px",
+              color: "#5A4A3A",
+              lineHeight: 1.6,
+              maxWidth: "600px",
+              margin: "0 auto",
+            }}
+          >
+            Create cassettes for the world. Make them from your favorite YouTube playlists or curate your own. 
+            Set them public and they'll appear on our shared shelf — a place for mood-based music discovery.
+          </p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          {/* Card 1: Create Public */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            className="rounded-2xl p-6 sm:p-8"
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #E8E5DF",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+            }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mb-4"
+              style={{ background: "rgba(212, 136, 42, 0.1)", color: "#D4882A", fontSize: "24px" }}
+            >
+              🎵
+            </div>
+            <h3
+              style={{
+                fontSize: "20px",
+                fontWeight: 600,
+                color: "#1D1D1F",
+                marginBottom: "8px",
+                fontFamily: "'Playfair Display', serif",
+              }}
+            >
+              From Playlists
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#5F6065",
+                lineHeight: 1.6,
+              }}
+            >
+              Search any YouTube playlist and convert it into a cassette instantly. All songs imported, ready to personalize.
+            </p>
+          </motion.div>
+
+          {/* Card 2: Discover & Listen */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="rounded-2xl p-6 sm:p-8"
+            style={{
+              background: "#FFFFFF",
+              border: "1px solid #E8E5DF",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
+            }}
+          >
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mb-4"
+              style={{ background: "rgba(212, 136, 42, 0.1)", color: "#D4882A", fontSize: "24px" }}
+            >
+              📼
+            </div>
+            <h3
+              style={{
+                fontSize: "20px",
+                fontWeight: 600,
+                color: "#1D1D1F",
+                marginBottom: "8px",
+                fontFamily: "'Playfair Display', serif",
+              }}
+            >
+              Public Shelf
+            </h3>
+            <p
+              style={{
+                fontSize: "14px",
+                color: "#5F6065",
+                lineHeight: 1.6,
+              }}
+            >
+              Browse cassettes made by the community. Find music by mood, theme, or vibe. Discover new creators and their stories.
+            </p>
+          </motion.div>
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="mt-10 text-center space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <Link
+              href="/create"
+              className="btn-primary text-base px-8 py-3 rounded-full"
+            >
+              Create Public Cassette
+            </Link>
+            <Link
+              href="/shelf"
+              className="btn-ghost text-base px-8 py-3 rounded-full"
+            >
+              Explore Shelf →
+            </Link>
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+
 /* ─── How it works section ────────────────────────────────────────────────── */
 function HowItWorksSection() {
   const steps = [
     {
       number: "01",
       title: "Search & pick",
-      description: "Find your songs on YouTube. YouTube only — no ads, just music.",
+      description: "Find your songs on YouTube. YouTube only — no ads, just music. Or import a whole playlist at once.",
     },
     {
       number: "02",
       title: "Write something real",
-      description: "Add a personal note to each song. Why you chose it. What it means.",
+      description: "Add a personal note to each song. Why you chose it. What it means. Then decide: share privately or make it public.",
     },
     {
       number: "03",
       title: "Send the tape",
-      description: "Share a link. They open it like a gift. No app needed. No signup.",
+      description: "Share a link privately or publish to the public shelf. Recipients open it like a gift. No app needed. No signup.",
     },
   ];
 
@@ -511,6 +677,9 @@ export default function HomepageClient({ tapes }: HomepageClientProps) {
           <PosterImage imageNumber={5} width={95} height={135} rotation={8} opacity={0.92} />
           <PosterImage imageNumber={6} width={105} height={145} rotation={-5} opacity={0.95} />
         </div>
+
+        {/* ── DISCOVER & SHARE SECTION ──────────────────────────────────────── */}
+        <DiscoverShareSection />
 
         {/* ── HOW IT WORKS (Below shelf) ─────────────────────────────────────── */}
         <HowItWorksSection />

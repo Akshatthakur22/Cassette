@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import CassetteObject from "@/app/components/CassetteObject";
 import RecordingSequence from "@/app/components/RecordingSequence";
 import { PosterImage } from "@/app/components/PosterImage";
+import { BackgroundImage } from "@/app/components/BackgroundImage";
+import { PlaylistSearchModal } from "@/app/components/PlaylistSearchModal";
+import { PlaylistItemSelector } from "@/app/components/PlaylistItemSelector";
+import { YoutubeSearchBar } from "@/app/components/YoutubeSearchBar";
 import {
   updateTapeMeta,
   addTrack,
@@ -14,8 +18,10 @@ import {
   updateTrackNote,
   publishTape,
   deleteTape,
+  addTracksFromPlaylist,
 } from "@/app/actions/tape";
 import type { TapeWithTracks, TrackRow } from "@/app/lib/types";
+import type { YoutubePlaylist, YoutubePlaylistItem } from "@/app/lib/youtube";
 
 // ─── 10-color tape picker ────────────────────────────────────────────────────
 const TAPE_STYLES = [
@@ -57,6 +63,11 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
   const [labelTyping, setLabelTyping] = useState(false);
   const labelTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [newTrack, setNewTrack] = useState({ title: "", artist: "", providerTrackId: "", durationSec: "" });
+  const [visibility, setVisibility] = useState<"unlisted" | "public">(
+    (initialTape.visibility as "unlisted" | "public") || "unlisted"
+  );
+  const [showPlaylistSearch, setShowPlaylistSearch] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<YoutubePlaylist | null>(null);
 
   const sideTracks = tape.tracks
     .filter(t => t.side === activeSide)
@@ -77,6 +88,7 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
     e.preventDefault();
     setMetaError(null);
     const fd = new FormData(e.currentTarget);
+    fd.set("visibility", visibility);
     startTransition(async () => {
       const res = await updateTapeMeta(tape.id, fd);
       if (res?.error) { setMetaError(res.error); return; }
@@ -85,7 +97,7 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
       const newStyle = fd.get("style") as string || tape.style;
       setTape(prev => ({ ...prev, title: newTitle, recipientName: newRecipient,
         dedication: fd.get("dedication") as string || prev.dedication,
-        style: newStyle as any }));
+        style: newStyle as any, visibility }));
       setLiveTitle(newTitle ?? "");
       setLiveRecipient(newRecipient ?? "");
       setShowMeta(false);
@@ -138,6 +150,40 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
     });
   }
 
+  function handlePlaylistSelect(playlist: YoutubePlaylist) {
+    setSelectedPlaylist(playlist);
+  }
+
+  function handlePlaylistItemsConfirm(items: YoutubePlaylistItem[]) {
+    return new Promise<void>((resolve) => {
+      if (!selectedPlaylist) return;
+      startTransition(async () => {
+        const res = await addTracksFromPlaylist(
+          tape.id,
+          selectedPlaylist.id,
+          selectedPlaylist.title,
+          `https://www.youtube.com/playlist?list=${selectedPlaylist.id}`,
+          items.map(item => ({
+            videoId: item.videoId,
+            title: item.title,
+            channelTitle: item.channelTitle,
+            thumbnail: item.thumbnail,
+          }))
+        );
+        if (res?.ok && res?.tracks) {
+          setTape(prev => ({
+            ...prev,
+            tracks: [...prev.tracks, ...res.tracks],
+            playlistSourceId: selectedPlaylist.id,
+            playlistName: selectedPlaylist.title,
+          } as any));
+        }
+        setSelectedPlaylist(null);
+        resolve();
+      });
+    });
+  }
+
   function handlePublish() {
     setPublishError(null);
     startTransition(async () => {
@@ -153,7 +199,25 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
   }
 
   return (
-    <div className="relative min-h-screen" style={{ background: "#FBFAF7" }}>
+    <div className="relative min-h-screen overflow-y-auto overflow-x-hidden" style={{ background: "#FBFAF7" }}>
+      {/* Background decorative image */}
+      <BackgroundImage
+        imageNumber={Math.floor(Math.random() * 13) + 1}
+        opacity={0.25}
+        position="bottom-left"
+      />
+
+      {/* Semi-transparent overlay for text readability */}
+      <div
+        className="absolute inset-0 z-5 pointer-events-none"
+        style={{
+          background: "linear-gradient(135deg, rgba(251,250,247,0.85) 0%, rgba(251,250,247,0.7) 50%, rgba(251,250,247,0.85) 100%)",
+        }}
+      />
+
+      {/* Content wrapper */}
+      <div className="relative z-10">
+      
       {/* Scattered poster decoration */}
       <div className="absolute top-32 right-6 z-0 opacity-45 hidden lg:block">
         <PosterImage imageNumber={16} width={75} height={105} rotation={8} />
@@ -294,19 +358,23 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
                       style={{ color: "#8E8E93", fontFamily: "monospace" }}>
                       Tape Colour
                     </label>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-3">
                       {TAPE_STYLES.map(s => (
                         <label key={s.value}
                           className="flex flex-col items-center gap-1 cursor-pointer group">
                           <input type="radio" name="style" value={s.value}
                             defaultChecked={tape.style === s.value} className="sr-only" />
                           <span
-                            className="w-7 h-7 rounded-full border-2 transition-all"
+                            className="w-9 h-9 rounded-full border-2 transition-all"
                             style={{
                               background: s.color,
                               borderColor: tape.style === s.value ? "#1D1D1F" : "rgba(0,0,0,0.08)",
                               boxShadow: tape.style === s.value ? `0 0 0 2px white, 0 0 0 3.5px ${s.color}` : "none",
                               transform: tape.style === s.value ? "scale(1.12)" : "scale(1)",
+                              minHeight: "44px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
                             }}
                           />
                           <span className="text-[9px] leading-none"
@@ -332,6 +400,46 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
                       rows={2}
                       className="cassette-input resize-none text-sm"
                     />
+                  </div>
+
+                  {/* Visibility Toggle */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs tracking-widest uppercase"
+                      style={{ color: "#8E8E93", fontFamily: "monospace" }}>
+                      Share with
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVisibility("unlisted")}
+                        className="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: visibility === "unlisted" ? "#1D1D1F" : "#F3EFE7",
+                          color: visibility === "unlisted" ? "#FBFAF7" : "#8E8E93",
+                          border: `1px solid ${visibility === "unlisted" ? "#1D1D1F" : "#E8E5DF"}`,
+                        }}
+                      >
+                        Only via link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setVisibility("public")}
+                        className="flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-all"
+                        style={{
+                          background: visibility === "public" ? "#D4882A" : "#F3EFE7",
+                          color: visibility === "public" ? "#FBFAF7" : "#8E8E93",
+                          border: `1px solid ${visibility === "public" ? "#D4882A" : "#E8E5DF"}`,
+                        }}
+                      >
+                        🌍 Public shelf
+                      </button>
+                    </div>
+                    <p className="text-xs"
+                      style={{ color: "#8E8E93", fontFamily: "var(--font-inter, Inter, sans-serif)" }}>
+                      {visibility === "public"
+                        ? "This tape will appear on the discovery shelf for everyone to find and enjoy."
+                        : "Only people with the link can find this tape."}
+                    </p>
                   </div>
 
                   {metaError && <p className="text-xs" style={{ color: "#C4503A" }}>{metaError}</p>}
@@ -361,10 +469,14 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
           {(["A", "B"] as const).map(s => (
             <button key={s} onClick={() => setActiveSide(s)}
               role="tab" aria-selected={activeSide === s}
-              className="px-5 py-1.5 rounded-full text-xs font-mono tracking-widest transition-all duration-200"
+              className="flex-1 px-5 py-2.5 rounded-full text-xs font-mono tracking-widest transition-all duration-200"
               style={{
                 background: activeSide === s ? "#1D1D1F" : "transparent",
                 color: activeSide === s ? "#FBFAF7" : "#8E8E93",
+                minHeight: "44px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               }}>
               SIDE {s} ({s === "A" ? sideATracks : sideBTracks})
             </button>
@@ -372,7 +484,7 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
         </div>
 
         {/* Track list — drag-and-drop friendly, responsive */}
-        <div className="w-full">
+        <div className="w-full max-h-96 overflow-y-auto overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
           <Reorder.Group
             axis="y" values={sideTracks} onReorder={handleReorder}
             className="flex flex-col gap-2"
@@ -415,25 +527,35 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
                       </div>
 
                       {/* Note + delete buttons — mobile-friendly touch targets */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => {
                             if (editingNoteId === track.id) { setEditingNoteId(null); }
                             else { setEditingNoteId(track.id); setNoteText(track.personalNote ?? ""); }
                           }}
-                          className="w-8 sm:w-7 h-8 sm:h-7 rounded-full flex items-center justify-center transition-all hover:opacity-70 active:scale-95"
+                          className="w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all hover:opacity-70 active:scale-95"
                           style={{
                             background: track.personalNote ? "rgba(160,120,64,0.12)" : "#F3EFE7",
                             color: track.personalNote ? "#A07840" : "#8E8E93",
-                            fontSize: "13px",
+                            fontSize: "14px",
+                            minHeight: "44px",
+                            minWidth: "44px",
                           }}
                           aria-label="Edit personal note"
+                          title="Edit note"
                         >✎</button>
                         <button
                           onClick={() => handleDeleteTrack(track.id)}
-                          className="w-8 sm:w-7 h-8 sm:h-7 rounded-full flex items-center justify-center transition-all hover:opacity-70 active:scale-95"
-                          style={{ background: "rgba(196,80,58,0.08)", color: "#C4503A", fontSize: "13px" }}
+                          className="w-10 h-10 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all hover:opacity-70 active:scale-95"
+                          style={{
+                            background: "rgba(196,80,58,0.08)",
+                            color: "#C4503A",
+                            fontSize: "14px",
+                            minHeight: "44px",
+                            minWidth: "44px",
+                          }}
                           aria-label="Delete track"
+                          title="Delete"
                         >✕</button>
                       </div>
                     </div>
@@ -474,11 +596,13 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
                             />
                             <div className="flex justify-end gap-2 mt-2">
                               <button onClick={() => setEditingNoteId(null)}
-                                className="text-xs px-2.5 sm:px-3 py-1.5 rounded-full btn-ghost">
+                                className="text-xs px-3 py-2.5 rounded-full btn-ghost"
+                                style={{ minHeight: "44px", minWidth: "44px" }}>
                                 Cancel
                               </button>
                               <button onClick={() => handleSaveNote(track.id)} disabled={isPending}
-                                className="text-xs px-2.5 sm:px-3 py-1.5 rounded-full btn-primary disabled:opacity-50">
+                                className="text-xs px-3 py-2.5 rounded-full btn-primary disabled:opacity-50"
+                                style={{ minHeight: "44px", minWidth: "44px" }}>
                                 {isPending ? "…" : "Save"}
                               </button>
                             </div>
@@ -494,7 +618,23 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
 
           {/* Add track */}
           {sideTracks.length < 12 && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-2">
+              {/* Add from playlist button */}
+              <motion.button
+                onClick={() => setShowPlaylistSearch(true)}
+                className="w-full py-3 rounded-xl text-sm transition-all hover:opacity-80 active:scale-[0.98]"
+                style={{
+                  background: "rgba(212, 136, 42, 0.08)",
+                  border: "1.5px dashed #D4882A",
+                  color: "#D4882A",
+                  fontFamily: "var(--font-inter, Inter, sans-serif)",
+                }}
+                whileHover={{ borderColor: "#C67820", color: "#C67820" }}
+              >
+                🎵 Add from Playlist
+              </motion.button>
+
+              {/* Add single track button */}
               {!showAddTrack ? (
                 <motion.button
                   onClick={() => setShowAddTrack(true)}
@@ -606,6 +746,22 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
             {tape.tracks.length === 0 && " Add at least one track."}
           </p>
         </div>
+
+        {/* Playlist modals */}
+        <PlaylistSearchModal
+          isOpen={showPlaylistSearch}
+          onClose={() => setShowPlaylistSearch(false)}
+          onSelectPlaylist={handlePlaylistSelect}
+        />
+        {selectedPlaylist && (
+          <PlaylistItemSelector
+            playlist={selectedPlaylist}
+            onConfirm={handlePlaylistItemsConfirm}
+            onCancel={() => setSelectedPlaylist(null)}
+          />
+        )}
+      </div>
+      {/* Close content wrapper */}
       </div>
     </div>
   );
@@ -621,29 +777,15 @@ function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackErr
     newTrack: any; setNewTrack: (t: any) => void;
     trackError: string | null; setTrackError: (e: string | null) => void;
     isPending: boolean; activeSide: "A" | "B"; onCancel: () => void; }) {
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [manualEntry, setManualEntry] = useState(false);
 
-  async function handleSearch(query: string) {
-    if (!query.trim()) { setSearchResults([]); return; }
-    setSearching(true);
-    try {
-      const params = new URLSearchParams();
-      params.set("title", query.split(" - ")[0]?.trim() || query);
-      if (query.includes(" - ")) params.set("artist", query.split(" - ")[1]?.trim() || "");
-      const res = await fetch(`/api/search?${params}`);
-      if (!res.ok) throw new Error("Search failed");
-      const data = await res.json();
-      setSearchResults((data.results ?? []).slice(0, 5));
-    } catch { setSearchResults([]); }
-    finally { setSearching(false); }
-  }
-
-  function selectResult(result: SearchResult) {
-    setNewTrack({ title: result.title, artist: result.channelTitle,
-      providerTrackId: result.videoId, durationSec: result.durationSec?.toString() ?? "" });
-    setSearchResults([]); setSearchQuery("");
+  function handleSearchResult(result: any) {
+    setNewTrack({
+      title: result.title,
+      artist: result.channelTitle,
+      providerTrackId: result.videoId,
+      durationSec: result.durationSec?.toString() ?? "",
+    });
   }
 
   return (
@@ -651,72 +793,80 @@ function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackErr
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       onSubmit={onSubmit}
-      className="rounded-2xl p-4 flex flex-col gap-3"
+      className="rounded-2xl p-4 flex flex-col gap-4"
       style={{ background: "#FFFFFF", border: "1px solid #E8E5DF", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}
     >
       <p className="text-[10px] font-mono tracking-widest uppercase" style={{ color: "#8E8E93" }}>
-        Put something on Side {activeSide}
+        🎵 Add to Side {activeSide}
       </p>
 
-      {/* YouTube search */}
-      <div className="relative">
-        <input
-          className="cassette-input text-sm"
-          placeholder="Search YouTube — 'Tum Se Hi Mohit Chauhan'"
-          value={searchQuery}
-          onChange={e => { setSearchQuery(e.target.value); handleSearch(e.target.value); }}
-        />
-        {searching && (
-          <span className="absolute right-3 top-3 text-xs" style={{ color: "#D4882A" }}>…</span>
-        )}
-        <AnimatePresence>
-          {searchResults.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              className="absolute top-full left-0 right-0 mt-1 rounded-xl overflow-hidden z-10"
-              style={{ background: "#FFFFFF", border: "1px solid #E8E5DF",
-                boxShadow: "0 8px 24px rgba(0,0,0,0.1)" }}
-            >
-              {searchResults.map(result => (
-                <button key={result.videoId} type="button" onClick={() => selectResult(result)}
-                  className="w-full flex gap-2 p-2.5 text-left hover:bg-gray-50 transition-colors"
-                  style={{ borderBottom: "1px solid #F3EFE7" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={result.thumbnailUrl} alt={result.title}
-                    className="w-12 h-9 rounded object-cover flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate" style={{ color: "#1D1D1F" }}>{result.title}</p>
-                    <p className="text-[10px] truncate" style={{ color: "#8E8E93" }}>{result.channelTitle}</p>
-                  </div>
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      {/* Use the new search bar for better UX */}
+      {!manualEntry && (
+        <div>
+          <YoutubeSearchBar
+            onSelectResult={handleSearchResult}
+            placeholder="Song title, artist, or YouTube link..."
+            type="song"
+          />
+          <button
+            type="button"
+            onClick={() => setManualEntry(true)}
+            className="text-xs mt-3 hover:opacity-70 transition-opacity"
+            style={{ color: "#D4882A" }}
+          >
+            Or enter manually →
+          </button>
+        </div>
+      )}
 
-      {/* Manual entry */}
-      {!searchQuery && (
+      {/* Manual entry option */}
+      {manualEntry && (
         <>
-          <input className="cassette-input text-sm" placeholder="Song title *"
-            value={newTrack.title} onChange={e => setNewTrack((p: any) => ({ ...p, title: e.target.value }))} />
-          <input className="cassette-input text-sm" placeholder="Artist"
-            value={newTrack.artist} onChange={e => setNewTrack((p: any) => ({ ...p, artist: e.target.value }))} />
-          <input className="cassette-input text-sm" placeholder="YouTube video ID *"
-            value={newTrack.providerTrackId} onChange={e => setNewTrack((p: any) => ({ ...p, providerTrackId: e.target.value }))} />
+          <input
+            className="cassette-input text-sm"
+            placeholder="Song title *"
+            value={newTrack.title}
+            onChange={(e) => setNewTrack((p: any) => ({ ...p, title: e.target.value }))}
+          />
+          <input
+            className="cassette-input text-sm"
+            placeholder="Artist"
+            value={newTrack.artist}
+            onChange={(e) => setNewTrack((p: any) => ({ ...p, artist: e.target.value }))}
+          />
+          <input
+            className="cassette-input text-sm"
+            placeholder="YouTube video ID *"
+            value={newTrack.providerTrackId}
+            onChange={(e) => setNewTrack((p: any) => ({ ...p, providerTrackId: e.target.value }))}
+          />
+          <button
+            type="button"
+            onClick={() => setManualEntry(false)}
+            className="text-xs hover:opacity-70 transition-opacity"
+            style={{ color: "#8E8E93" }}
+          >
+            ← Back to search
+          </button>
         </>
       )}
 
       {trackError && <p className="text-xs" style={{ color: "#C4503A" }}>{trackError}</p>}
 
-      <div className="flex gap-2">
-        <button type="button" onClick={onCancel}
-          className="flex-1 py-2.5 rounded-full text-xs btn-ghost">Cancel</button>
-        <button type="submit" disabled={isPending}
-          className="flex-1 py-2.5 rounded-full text-xs btn-primary disabled:opacity-50">
-          {isPending ? "Adding…" : "Add"}
+      <div className="flex gap-2 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 py-2.5 rounded-full text-xs btn-ghost"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={isPending}
+          className="flex-1 py-2.5 rounded-full text-xs btn-primary disabled:opacity-50"
+        >
+          {isPending ? "Adding…" : "Add Song"}
         </button>
       </div>
     </motion.form>

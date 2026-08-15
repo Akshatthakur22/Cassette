@@ -24,10 +24,29 @@ async function getVerifiedTape(draftId: string) {
   const token = jar.get(DRAFT_COOKIE)?.value;
   if (!token) return null;
 
-  const tape = await prisma.tape.findUnique({ where: { id: draftId } });
+  const tape = await prisma.tape.findUnique({ 
+    where: { id: draftId },
+    select: {
+      id: true,
+      draftToken: true,
+      status: true,
+      title: true,
+      dedication: true,
+      senderName: true,
+      recipientName: true,
+      relationship: true,
+      style: true,
+      visibility: true,
+      memoryDate: true,
+      publicId: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+    }
+  });
   if (!tape || tape.draftToken !== token) return null;
   if (tape.status === "deleted") return null;
-  return tape;
+  return tape as any;
 }
 
 // ─── createDraft ────────────────────────────────────────────────────────────
@@ -116,10 +135,11 @@ export async function updateTapeMeta(draftId: string, formData: FormData) {
   const recipientName = (formData.get("recipientName") as string | null)?.trim() ?? null;
   const dedication    = (formData.get("dedication")    as string | null)?.trim().slice(0, 500) ?? null;
   const style         = (formData.get("style")         as TapeStyle | null) ?? tape.style as TapeStyle;
+  const visibility    = (formData.get("visibility")    as string | null) ?? tape.visibility;
 
   await prisma.tape.update({
     where: { id: draftId },
-    data: { title, recipientName, dedication, style },
+    data: { title, recipientName, dedication, style, visibility },
   });
 
   return { ok: true };
@@ -161,6 +181,77 @@ export async function addTrack(draftId: string, track: TrackInput) {
   }).catch(err => console.warn("PostHog tracking error:", err));
 
   return { ok: true, track: created };
+}
+
+// ─── addTracksFromPlaylist ──────────────────────────────────────────────────
+
+export async function addTracksFromPlaylist(
+  draftId: string,
+  playlistId: string,
+  playlistName: string,
+  playlistUrl: string,
+  items: Array<{ videoId: string; title: string; channelTitle?: string; thumbnail?: string; durationSec?: number }>
+) {
+  const tape = await getVerifiedTape(draftId);
+  if (!tape) return { error: "Unauthorized." };
+
+  if (items.length === 0) {
+    return { error: "No items to add." };
+  }
+
+  // Distribute tracks across Side A and B
+  let sideACount = await prisma.tapeTrack.count({ where: { tapeId: draftId, side: "A" } });
+  let sideBCount = await prisma.tapeTrack.count({ where: { tapeId: draftId, side: "B" } });
+
+  const createdTracks = [];
+
+  for (const item of items) {
+    // Determine which side to add to (balance them)
+    const side = sideACount <= sideBCount ? "A" : "B";
+    const isA = side === "A";
+
+    // Check if side is full
+    const currentCount = isA ? sideACount : sideBCount;
+    if (currentCount >= 12) {
+      // Skip this item, side is full
+      continue;
+    }
+
+    // Get the position for this side
+    const position = currentCount;
+
+    const created = await prisma.tapeTrack.create({
+      data: {
+        tapeId:          draftId,
+        side,
+        position,
+        title:           item.title,
+        artist:          item.channelTitle ?? null,
+        thumbnailUrl:    item.thumbnail ?? null,
+        providerTrackId: item.videoId,
+        durationSec:     item.durationSec ?? null,
+      },
+    });
+
+    createdTracks.push(created);
+
+    // Update counts
+    if (isA) sideACount++;
+    else sideBCount++;
+  }
+
+  // Playlist metadata will be stored once database is migrated
+  // For now, we only track individual tracks
+
+  // Track the event
+  const { trackEvent, EVENTS } = await import("@/app/lib/posthog");
+  trackEvent(tape.senderName, EVENTS.TRACK_ADDED, {
+    source: "playlist",
+    playlistName,
+    count: createdTracks.length,
+  }).catch(err => console.warn("PostHog tracking error:", err));
+
+  return { ok: true, count: createdTracks.length, tracks: createdTracks };
 }
 
 // ─── updateTrackNote ────────────────────────────────────────────────────────
@@ -283,13 +374,28 @@ export async function getTapeForEditor(draftId: string) {
 export async function getTapeByDraftToken(draftToken: string) {
   const tape = await prisma.tape.findUnique({
     where: { draftToken },
-    include: {
+    select: {
+      id: true,
+      publicId: true,
+      draftToken: true,
+      title: true,
+      dedication: true,
+      senderName: true,
+      recipientName: true,
+      relationship: true,
+      style: true,
+      visibility: true,
+      memoryDate: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
       tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
     },
   });
 
   if (!tape || tape.status === "deleted") return null;
-  return tape;
+  return tape as any;
 }
 
 // ─── getTapeByPublicId (for recipient view) ──────────────────────────────────
@@ -304,7 +410,22 @@ export async function getTapeByPublicId(publicId: string) {
     
     const tape = await prisma.tape.findUnique({
       where: { publicId },
-      include: {
+      select: {
+        id: true,
+        publicId: true,
+        draftToken: true,
+        title: true,
+        dedication: true,
+        senderName: true,
+        recipientName: true,
+        relationship: true,
+        style: true,
+        visibility: true,
+        memoryDate: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        deletedAt: true,
         tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
       },
     });

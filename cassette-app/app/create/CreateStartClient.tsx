@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import { createDraft } from "@/app/actions/tape";
+import { BackgroundImage } from "@/app/components/BackgroundImage";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 
 const RELATIONSHIPS = [
@@ -67,8 +68,25 @@ export default function CreateStartClient() {
   }
 
   return (
-    <div className="relative min-h-screen" style={{ background: "#FBFAF7" }}>
+    <div className="relative min-h-screen overflow-hidden" style={{ background: "#FBFAF7" }}>
+      
+      {/* Background decorative image */}
+      <BackgroundImage
+        imageNumber={Math.floor(Math.random() * 13) + 1}
+        opacity={0.22}
+        position="bottom-left"
+      />
 
+      {/* Semi-transparent overlay for text readability */}
+      <div
+        className="absolute inset-0 z-5 pointer-events-none"
+        style={{
+          background: "linear-gradient(135deg, rgba(251,250,247,0.8) 0%, rgba(251,250,247,0.65) 50%, rgba(251,250,247,0.8) 100%)",
+        }}
+      />
+
+      {/* Content wrapper */}
+      <div className="relative z-10">
       {/* Sticky nav */}
       <div
         className="sticky top-0 z-30 flex items-center justify-between px-5 py-4"
@@ -252,6 +270,8 @@ export default function CreateStartClient() {
           )}
 
         </AnimatePresence>
+      </div>
+      {/* Close content wrapper */}
       </div>
     </div>
   );

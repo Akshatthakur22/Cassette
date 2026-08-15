@@ -9,6 +9,7 @@ import TrackList from "./TrackList";
 import ShareButton from "./ShareButton";
 import CaseOpeningGate from "./CaseOpeningGate";
 import { PosterImage } from "./PosterImage";
+import { BackgroundImage } from "./BackgroundImage";
 import { recordView } from "@/app/actions/tape";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 import { playClickSound, playFlipSound } from "@/app/lib/sounds";
@@ -28,6 +29,39 @@ const ACCENT_BY_STYLE: Record<string, string> = {
   transparent: "#38A8E8", smoky: "#9060C8",
   classic: "#D4882A", y2k: "#D040F0", love: "#D45A6A", road_trip: "#5B7FA6",
 };
+
+/* ─── Error / Empty fallbacks ────────────────────────────────────────────── */
+function ErrorScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
+      style={{ background: "#FBFAF7" }}>
+      <p className="text-2xl font-bold italic"
+        style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#1D1D1F" }}>
+        The tape got stuck.
+      </p>
+      <p className="text-sm text-center" style={{ color: "#8E8E93" }}>
+        Something went wrong loading this tape.
+      </p>
+      <button onClick={onRetry} className="btn-ghost text-sm">
+        Try again →
+      </button>
+    </div>
+  );
+}
+
+function EmptyScreen({ isPreview }: { isPreview: boolean }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
+      style={{ background: "#FBFAF7" }}>
+      <p className="text-sm" style={{ color: "#8E8E93" }}>
+        This tape has no tracks yet.
+      </p>
+      {isPreview && (
+        <a href="." className="btn-ghost text-sm">← Add tracks</a>
+      )}
+    </div>
+  );
+}
 
 export default function TapeViewClient({ tape, isPreview = false }: Props) {
   const reduceMotion = useReduceMotion();
@@ -208,13 +242,30 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
 
   return (
     <div
-      className="relative min-h-screen"
-      style={{ background: "#FBFAF7" }}
+      className="relative min-h-screen overflow-y-auto overflow-x-hidden"
+      style={{ background: "#FBFAF7", scrollBehavior: "smooth" }}
     >
-      {/* Scattered poster decoration */}
-      <div className="absolute top-20 left-4 z-0 opacity-50 hidden lg:block">
-        <PosterImage imageNumber={14} width={80} height={110} rotation={-12} />
-      </div>
+      {/* Background decorative image */}
+      <BackgroundImage
+        imageNumber={Math.floor(Math.random() * 20) + 1}
+        opacity={0.5}
+        blendMode="normal"
+        position="top-right"
+      />
+
+      {/* Semi-transparent overlay for text readability */}
+      <div
+        className="absolute inset-0 z-5 pointer-events-none"
+        style={{
+          background: "linear-gradient(135deg, rgba(251,250,247,0.85) 0%, rgba(251,250,247,0.7) 50%, rgba(251,250,247,0.85) 100%)",
+        }}
+      />
+
+      {/* Content wrapper */}
+      <div className="relative z-10">
+        <div className="absolute top-20 left-4 z-0 opacity-50 hidden lg:block">
+          <PosterImage imageNumber={14} width={80} height={110} rotation={-12} />
+        </div>
 
       {/* ── CASE OPENING GATE ──────────────────────────────────────────── */}
       <AnimatePresence>
@@ -666,6 +717,9 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
         </AnimatePresence>
       </div>
 
+      {/* End of Content wrapper */}
+      </div>
+
       {/* ── PLAYER BAR ──────────────────────────────────────────────────── */}
       {inserted && (
         <PlayerBar
@@ -685,39 +739,6 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           }}
           accentColor={accentColor}
         />
-      )}
-    </div>
-  );
-}
-
-/* ─── Error / Empty fallbacks ────────────────────────────────────────────── */
-function ErrorScreen({ onRetry }: { onRetry: () => void }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
-      style={{ background: "#FBFAF7" }}>
-      <p className="text-2xl font-bold italic"
-        style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#1D1D1F" }}>
-        The tape got stuck.
-      </p>
-      <p className="text-sm text-center" style={{ color: "#8E8E93" }}>
-        Something went wrong loading this tape.
-      </p>
-      <button onClick={onRetry} className="btn-ghost text-sm">
-        Try again →
-      </button>
-    </div>
-  );
-}
-
-function EmptyScreen({ isPreview }: { isPreview: boolean }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
-      style={{ background: "#FBFAF7" }}>
-      <p className="text-sm" style={{ color: "#8E8E93" }}>
-        This tape has no tracks yet.
-      </p>
-      {isPreview && (
-        <a href="." className="btn-ghost text-sm">← Add tracks</a>
       )}
     </div>
   );

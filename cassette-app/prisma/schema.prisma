@@ -9,24 +9,30 @@ datasource db {
 }
 
 model Tape {
-  id            String      @id @default(cuid())
-  publicId      String      @unique
-  draftToken    String      @unique
-  title         String?
-  dedication    String?
-  senderName    String
-  recipientName String?
-  relationship  String?     // partner | best_friend | family | memory | self | other
-  style         String      @default("classic") // classic | y2k | love | road_trip
-  visibility    String      @default("unlisted")
-  memoryDate    DateTime?
-  status        String      @default("draft")   // draft | published | deleted
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  deletedAt     DateTime?
-  tracks        TapeTrack[]
-  views         TapeView[]
-  shareEvents   ShareEvent[]
+  id                String      @id @default(cuid())
+  publicId          String      @unique
+  draftToken        String      @unique
+  title             String?
+  dedication        String?
+  senderName        String
+  recipientName     String?
+  relationship      String?     // partner | best_friend | family | memory | self | other
+  style             String      @default("classic") // classic | y2k | love | road_trip
+  visibility        String      @default("unlisted") // unlisted | public
+  memoryDate        DateTime?
+  status            String      @default("draft")   // draft | published | deleted
+  
+  // Playlist metadata (optional, for playlists created from YouTube)
+  playlistSourceId  String?     // YouTube playlist ID if created from playlist
+  playlistSourceUrl String?     // Original YouTube playlist URL
+  playlistName      String?     // Original playlist name from YouTube
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+  tracks            TapeTrack[]
+  views             TapeView[]
+  shareEvents       ShareEvent[]
 }
 
 model TapeTrack {
@@ -75,6 +81,20 @@ model YoutubeSearchCache {
   channelTitle    String
   thumbnailUrl    String
   durationSec     Int?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model YoutubePlaylistCache {
+  id              String   @id @default(cuid())
+  playlistId      String   @unique // YouTube playlist ID
+  title           String
+  description     String?
+  thumbnailUrl    String?
+  channelTitle    String?
+  trackCount      Int
   expiresAt       DateTime
   createdAt       DateTime @default(now())
 

@@ -16,7 +16,7 @@ interface BackgroundImageProps {
 export function BackgroundImage({
   imageNumber,
   opacity = 0.5,
-  blendMode = "multiply",
+  blendMode = "normal",
   position = "center",
   objectFit = "cover",
   className = "",
@@ -40,11 +40,11 @@ export function BackgroundImage({
         alt={`Background decoration ${imageNumber}`}
         fill
         priority={imageNumber <= 3}
-        quality={85}
+        quality={90}
         className={`
           ${positionMap[position]}
           ${objectFit === "cover" ? "object-cover" : objectFit === "contain" ? "object-contain" : "object-fill"}
-          transition-opacity duration-700
+          transition-opacity duration-500
           ${isLoaded ? "opacity-100" : "opacity-0"}
         `}
         style={{

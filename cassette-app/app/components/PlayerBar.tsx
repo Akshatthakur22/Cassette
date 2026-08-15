@@ -158,7 +158,7 @@ function HardwareButton({
   color?: string;
   title?: string;
 }) {
-  const dim = size === "lg" ? 50 : size === "md" ? 42 : 34;
+  const dim = size === "lg" ? 50 : size === "md" ? 44 : 44;
   const radius = size === "lg" ? 10 : 8;
 
   return (

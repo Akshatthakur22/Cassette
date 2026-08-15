@@ -162,8 +162,8 @@ export default async function TapePage({ params }: Props) {
           </p>
         )}
         <div className="flex gap-3">
-          <button
-            onClick={() => window.location.reload()}
+          <a
+            href="/"
             className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
             style={{
               background: "rgba(212,136,42,0.15)",
@@ -173,7 +173,7 @@ export default async function TapePage({ params }: Props) {
             }}
           >
             Refresh
-          </button>
+          </a>
           <a
             href="/"
             className="mt-4 px-6 py-2.5 rounded-full text-sm transition-all hover:opacity-80"
