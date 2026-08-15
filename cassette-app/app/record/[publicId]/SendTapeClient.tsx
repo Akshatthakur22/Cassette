@@ -8,7 +8,7 @@ import { recordShare } from "@/app/actions/tape";
 import { playCaseCloseSound } from "@/app/lib/sounds";
 import { useReduceMotion } from "@/app/lib/use-reduce-motion";
 
-type TapeStyle = "classic" | "y2k" | "love" | "road_trip";
+type TapeStyle = "classic" | "y2k" | "love" | "road_trip" | "school" | "summer";
 
 interface Props {
   publicId: string;
@@ -38,14 +38,33 @@ export default function SendTapeClient({
     setTimeout(() => { setCaseState("closed"); setSent(true); }, 600);
   }
 
-  async function handleShare(platform: "native" | "whatsapp" | "copy") {
+  async function handleShare(platform: string) {
     const shareText = `${recipientName ? `For ${recipientName} — ` : ""}a tape was made for you ❤️\n${tapeUrl}`;
     recordShare(tapeId, platform).catch(() => {});
+    
     if (platform === "native" && "share" in navigator) {
       try { await navigator.share({ title: title || "A tape for you", text: shareText, url: tapeUrl }); } catch {}
     } else if (platform === "whatsapp") {
       window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, "_blank");
-    } else {
+    } else if (platform === "x") {
+      const xUrl = `https://x.com/intent/post?url=${encodeURIComponent(tapeUrl)}&text=${encodeURIComponent(shareText)}&hashtags=cassette`;
+      window.open(xUrl, "_blank");
+    } else if (platform === "telegram") {
+      const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(tapeUrl)}&text=${encodeURIComponent(shareText)}`;
+      window.open(tgUrl, "_blank");
+    } else if (platform === "facebook") {
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?app_id=${process.env.NEXT_PUBLIC_FACEBOOK_APP_ID || ""}&display=popup&href=${encodeURIComponent(tapeUrl)}&quote=${encodeURIComponent(shareText)}`;
+      window.open(fbUrl, "_blank");
+    } else if (platform === "email") {
+      const subject = `A tape from someone for ${recipientName || "you"} ❤️`;
+      const body = `${shareText}\n\nOpen the tape here:\n${tapeUrl}`;
+      const emailUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = emailUrl;
+    } else if (platform === "instagram") {
+      const igText = `${shareText}\n\n(Copy this message and send it via Instagram DM)`;
+      await navigator.clipboard.writeText(igText);
+      window.open("https://instagram.com", "_blank");
+    } else if (platform === "copy") {
       await navigator.clipboard.writeText(tapeUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2400);
@@ -57,6 +76,8 @@ export default function SendTapeClient({
     { value: "road_trip", label: "Slate",  swatch: "#5B7FA6" },
     { value: "love",      label: "Rouge",  swatch: "#D45A6A" },
     { value: "y2k",       label: "Neon",   swatch: "#E040FB" },
+    { value: "school",    label: "School", swatch: "#4A5F8F" },
+    { value: "summer",    label: "Summer", swatch: "#F5A623" },
   ] as const;
 
   return (
@@ -322,7 +343,7 @@ export default function SendTapeClient({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.35 }}
-                className="w-full flex flex-col gap-3"
+                className="w-full flex flex-col gap-2"
               >
                 {/* Primary */}
                 <button
@@ -333,34 +354,15 @@ export default function SendTapeClient({
                   <span>Send it to {recipientName}</span>
                 </button>
 
-                {/* WhatsApp */}
-                <button
-                  onClick={() => handleShare("whatsapp")}
-                  className="w-full py-3 rounded-full text-sm flex items-center justify-center gap-2 transition-all hover:opacity-80"
-                  style={{
-                    background: "rgba(37,211,102,0.1)",
-                    border: "1.5px solid rgba(37,211,102,0.3)",
-                    color: "#1D9948",
-                    fontFamily: "var(--font-inter, Inter, sans-serif)",
-                  }}
-                >
-                  <span>💬</span> Send via WhatsApp
-                </button>
-
-                {/* Copy link */}
-                <button
-                  onClick={() => handleShare("copy")}
-                  className="w-full py-3 rounded-full text-sm transition-all hover:opacity-80"
-                  style={{
-                    background: "#F3EFE7",
-                    border: "1.5px solid #E8E5DF",
-                    color: copied ? "#28A858" : "#5F6065",
-                    fontFamily: "monospace",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  {copied ? "✓ Link copied" : "Copy link"}
-                </button>
+                {/* Platform buttons — 2x3 grid */}
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <SharePlatformButton platform="whatsapp" label="WhatsApp" icon="💬" onClick={() => handleShare("whatsapp")} />
+                  <SharePlatformButton platform="x" label="X" icon="𝕏" onClick={() => handleShare("x")} />
+                  <SharePlatformButton platform="telegram" label="Telegram" icon="✈" onClick={() => handleShare("telegram")} />
+                  <SharePlatformButton platform="facebook" label="Facebook" icon="f" onClick={() => handleShare("facebook")} />
+                  <SharePlatformButton platform="email" label="Email" icon="✉" onClick={() => handleShare("email")} />
+                  <SharePlatformButton platform="copy" label={copied ? "✓ Copied" : "Copy"} icon="📋" onClick={() => handleShare("copy")} accent={copied} />
+                </div>
               </motion.div>
 
               {/* Tape URL */}
@@ -394,5 +396,50 @@ export default function SendTapeClient({
       {/* Close content wrapper */}
       </div>
     </div>
+  );
+}
+
+/**
+ * Compact platform share button for the 2x3 grid
+ */
+function SharePlatformButton({
+  platform,
+  label,
+  icon,
+  onClick,
+  accent = false,
+}: {
+  platform: string;
+  label: string;
+  icon: string;
+  onClick: () => void;
+  accent?: boolean;
+}) {
+  const platformColors: Record<string, { bg: string; border: string; text: string }> = {
+    whatsapp: { bg: "rgba(37,211,102,0.1)", border: "rgba(37,211,102,0.3)", text: "#1D9948" },
+    x: { bg: "rgba(0,0,0,0.08)", border: "rgba(0,0,0,0.2)", text: "#000000" },
+    telegram: { bg: "rgba(0,136,204,0.1)", border: "rgba(0,136,204,0.3)", text: "#0088CC" },
+    facebook: { bg: "rgba(24,119,242,0.1)", border: "rgba(24,119,242,0.3)", text: "#1877F2" },
+    email: { bg: "rgba(142,142,147,0.1)", border: "rgba(142,142,147,0.3)", text: "#8E8E93" },
+    copy: { bg: "#F3EFE7", border: "#E8E5DF", text: accent ? "#28A858" : "#5F6065" },
+  };
+
+  const colors = platformColors[platform] || platformColors.copy;
+
+  return (
+    <button
+      onClick={onClick}
+      className="py-2.5 rounded-lg transition-all hover:opacity-80 active:scale-95 flex flex-col items-center gap-1"
+      style={{
+        background: colors.bg,
+        border: `1px solid ${colors.border}`,
+        color: colors.text,
+        fontFamily: "var(--font-inter, Inter, sans-serif)",
+      }}
+      aria-label={`Share via ${label}`}
+    >
+      <span className="text-lg">{icon}</span>
+      <span className="text-[9px] font-semibold">{label}</span>
+    </button>
   );
 }

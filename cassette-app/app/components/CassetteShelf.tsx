@@ -38,6 +38,8 @@ const SPINE_COLORS: Record<TapeColorKey, {
   y2k:         { bg: "#D040F0", accent: "#00E5FF", text: "#F8E0FF", stripe: "#1A0D2E" },
   love:        { bg: "#D45A6A", accent: "#F7A8B0", text: "#FFFFFF", stripe: "#2C0A0A" },
   road_trip:   { bg: "#5B7FA6", accent: "#D4882A", text: "#E8F4FF", stripe: "#0D1A1A" },
+  school:      { bg: "#4A5F8F", accent: "#7A8FB0", text: "#E0E8F0", stripe: "#2A3A5A" },
+  summer:      { bg: "#F5A623", accent: "#FFD966", text: "#3D2800", stripe: "#E8920A" },
 };
 
 function getSpineColor(style: TapeColorKey) {
@@ -326,7 +328,7 @@ export default function CassetteShelf({ tapes, perRow }: CassetteShelfProps) {
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-2 sm:px-3 md:px-4 py-4 sm:py-6">
+    <div className="w-full max-w-3xl mx-auto px-6 sm:px-3 md:px-4 py-4 sm:py-6">
       <ShelfStack tapes={tapes} />
     </div>
   );

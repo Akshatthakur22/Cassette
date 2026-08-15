@@ -31,7 +31,7 @@ export function YoutubeSearchBar({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounced search
+  // Debounced search with real-time feedback
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
@@ -44,26 +44,36 @@ export function YoutubeSearchBar({
     }
 
     setIsSearching(true);
+    // Increased debounce time for better UX (users see "searching..." state)
     searchTimeoutRef.current = setTimeout(() => {
       startTransition(async () => {
         try {
           const endpoint =
             type === "song"
-              ? `/api/search?title=${encodeURIComponent(query.trim())}`
+              ? `/api/search-enhanced?title=${encodeURIComponent(query.trim())}&cache=true`
               : `/api/youtube/playlists/search?q=${encodeURIComponent(query.trim())}`;
 
           const response = await fetch(endpoint);
-          if (!response.ok) throw new Error("Search failed");
+          if (!response.ok) {
+            console.error(`Search request failed with status ${response.status}`);
+            throw new Error(`Search failed: ${response.status}`);
+          }
 
           const data = await response.json();
 
+          // Check for API errors in response body
+          if (data.error) {
+            console.warn("Search API returned error:", data.error, data.message);
+          }
+
           if (type === "song") {
-            const songResults = (data.results || []).slice(0, 8).map((r: any) => ({
+            const songResults = (data.results || []).slice(0, 10).map((r: any) => ({
               videoId: r.videoId,
               title: r.title,
               channelTitle: r.channelTitle,
               thumbnail: r.thumbnailUrl,
               durationSec: r.durationSec,
+              cached: r.cached,
             }));
             setResults(songResults);
           } else {
@@ -79,13 +89,14 @@ export function YoutubeSearchBar({
 
           setSelectedIndex(0);
         } catch (error) {
-          console.error("Search error:", error);
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.error("Search error:", errorMsg, { query, type });
           setResults([]);
         } finally {
           setIsSearching(false);
         }
       });
-    }, 300); // 300ms debounce
+    }, 400); // Increased debounce for smoother feel (was 300ms)
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);

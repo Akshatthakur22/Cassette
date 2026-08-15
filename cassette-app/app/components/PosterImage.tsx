@@ -37,6 +37,7 @@ export function PosterImage({
         src={`/images/optimized/${imageNumber}.png`}
         alt={`Poster ${imageNumber}`}
         fill
+        sizes="(max-width: 768px) 50px, (max-width: 1024px) 70px, 100px"
         quality={85}
         className="object-cover"
         style={{

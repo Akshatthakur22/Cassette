@@ -32,10 +32,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ogImage.searchParams.set("sender", tape.senderName);
     ogImage.searchParams.set("style", tape.style);
 
+    // Enable indexing for public tapes only
+    const isPublic = tape.visibility === "public";
+
     return {
       title,
       description,
-      robots: { index: false, follow: false },
+      robots: { 
+        index: isPublic, 
+        follow: isPublic,
+        "max-snippet": -1,
+        "max-image-preview": "large",
+        "max-video-preview": -1,
+      },
       openGraph: {
         title,
         description,
@@ -55,6 +64,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description,
         images: [ogImage.toString()],
       },
+      keywords: isPublic ? [
+        "digital mixtape",
+        "cassette",
+        tape.senderName,
+        tape.recipientName || "mixtape",
+        tape.title || "tape",
+        "music",
+        "playlist",
+        "emotional",
+      ] : undefined,
     };
   } catch (error) {
     console.error("Error generating metadata:", error);
@@ -122,7 +141,7 @@ export default async function TapePage({ params }: Props) {
       deletedAt: tape.deletedAt?.toISOString() || null,
       tracks: tape.tracks.map(track => ({
         ...track,
-        createdAt: track.createdAt.toISOString(),
+        createdAt: track.createdAt ? (typeof track.createdAt === 'string' ? track.createdAt : track.createdAt.toISOString()) : new Date().toISOString(),
         // Ensure all fields are properly set
         id: track.id,
         tapeId: track.tapeId,
@@ -131,7 +150,7 @@ export default async function TapePage({ params }: Props) {
         title: track.title,
         artist: track.artist || null,
         thumbnailUrl: track.thumbnailUrl || null,
-        provider: track.provider,
+        provider: track.provider || "youtube",
         providerTrackId: track.providerTrackId,
         personalNote: track.personalNote || null,
         durationSec: track.durationSec || null,

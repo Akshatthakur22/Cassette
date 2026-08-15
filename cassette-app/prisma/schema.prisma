@@ -17,15 +17,23 @@ model Tape {
   senderName        String
   recipientName     String?
   relationship      String?     // partner | best_friend | family | memory | self | other
-  style             String      @default("classic") // classic | y2k | love | road_trip
+  style             String      @default("classic") // classic | y2k | love | road_trip | school | summer
   visibility        String      @default("unlisted") // unlisted | public
   memoryDate        DateTime?
   status            String      @default("draft")   // draft | published | deleted
+  flaggedForReview  Boolean     @default(false)
+  createdFromTapeId String?     // Track "make one back" origin for viral coefficient
   
   // Playlist metadata (optional, for playlists created from YouTube)
   playlistSourceId  String?     // YouTube playlist ID if created from playlist
   playlistSourceUrl String?     // Original YouTube playlist URL
   playlistName      String?     // Original playlist name from YouTube
+  
+  // Voice message (optional)
+  voiceMessageUrl   String?     // S3/storage URL for voice file
+  voiceMessageSize  Int?        // File size in bytes
+  voiceMessageDuration Int?     // Duration in seconds
+  voiceMessageMimeType String?  // audio/webm, audio/mp3, etc
   
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -33,6 +41,14 @@ model Tape {
   tracks            TapeTrack[]
   views             TapeView[]
   shareEvents       ShareEvent[]
+  contentReports    ContentReport[]
+
+  // Indexes for critical lookups
+  @@index([publicId])
+  @@index([draftToken])
+  @@index([status])
+  @@index([visibility])
+  @@index([deletedAt])
 }
 
 model TapeTrack {
@@ -71,6 +87,7 @@ model TapeView {
   createdAt DateTime @default(now())
 
   @@index([tapeId])
+  @@index([sessionId])
 }
 
 model YoutubeSearchCache {
@@ -99,4 +116,18 @@ model YoutubePlaylistCache {
   createdAt       DateTime @default(now())
 
   @@index([expiresAt])
+}
+model ContentReport {
+  id                String   @id @default(cuid())
+  tapeId            String
+  tape              Tape     @relation(fields: [tapeId], references: [id], onDelete: Cascade)
+  reporterSessionId String
+  reason            String   // inappropriate | spam | copyright | harassment | other
+  details           String?
+  status            String   @default("pending") // pending | reviewed | removed
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([tapeId])
+  @@index([status])
 }

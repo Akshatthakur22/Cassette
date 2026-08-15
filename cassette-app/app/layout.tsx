@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
+import { PerformanceMonitor } from "./components/PerformanceMonitor";
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
     description: "A tape was made for you ❤️",
     type: "website",
   },
-  robots: { index: false, follow: false },
+  robots: { index: true, follow: true },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -33,6 +34,18 @@ export const metadata: Metadata = {
     title: "CASSETTE",
   },
   formatDetection: { telephone: false },
+  keywords: [
+    "digital mixtape",
+    "music playlist",
+    "cassette tape",
+    "emotional music",
+    "song notes",
+    "music gift",
+    "playlist maker",
+    "tape creator",
+    "mixtape generator",
+    "music memories",
+  ],
 };
 
 export const viewport: Viewport = {
@@ -53,12 +66,33 @@ export default function RootLayout({
       className={`${playfair.variable} ${inter.variable} h-full`}
     >
       <head>
+        {/* Structured data for search engines */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "CASSETTE",
+              description: "A no-signup digital mixtape platform",
+              url: "https://cassette.fm",
+              applicationCategory: "MusicApplication",
+              offers: {
+                "@type": "Offer",
+                price: "0",
+                priceCurrency: "USD",
+              },
+              image: "https://cassette.fm/api/og-image",
+            }),
+          }}
+        />
         <link
           rel="icon"
           href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%23D4882A' width='48' height='48'/><text x='24' y='34' font-size='30' font-weight='bold' text-anchor='middle' fill='%23060408' font-family='serif'>♫</text></svg>"
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <PerformanceMonitor />
         {children}
         <ServiceWorkerRegistrar />
       </body>

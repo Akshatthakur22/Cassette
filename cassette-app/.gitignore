@@ -20,6 +20,9 @@
 # production
 /build
 
+# voice recordings (uploaded files)
+/public/voice-recordings/
+
 # misc
 .DS_Store
 *.pem

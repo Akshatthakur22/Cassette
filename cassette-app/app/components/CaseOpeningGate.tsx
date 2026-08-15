@@ -32,6 +32,8 @@ const TAPE_COLOR_MAP: Record<TapeColorKey, { accent: string; glow: string }> = {
   y2k:         { accent: "#E020F0", glow: "rgba(224,32,240,0.14)" },
   love:        { accent: "#D45A6A", glow: "rgba(212,90,106,0.14)" },
   road_trip:   { accent: "#5B7FA6", glow: "rgba(91,127,166,0.12)" },
+  school:      { accent: "#4A5F8F", glow: "rgba(74,95,143,0.12)" },
+  summer:      { accent: "#F5A623", glow: "rgba(245,166,35,0.14)" },
 };
 
 export default function CaseOpeningGate({
@@ -48,10 +50,12 @@ export default function CaseOpeningGate({
   const colorConfig = TAPE_COLOR_MAP[style] ?? TAPE_COLOR_MAP.cream;
 
   // Map all 10 new colors to closest legacy style for CassetteCase SVG
-  const legacyStyle: "classic" | "y2k" | "love" | "road_trip" =
+  const legacyStyle: "classic" | "y2k" | "love" | "road_trip" | "school" | "summer" =
     style === "y2k" ? "y2k" :
     style === "love" ? "love" :
     style === "road_trip" ? "road_trip" :
+    style === "school" ? "school" :
+    style === "summer" ? "summer" :
     "classic";
 
   async function handleOpen() {
@@ -68,7 +72,7 @@ export default function CaseOpeningGate({
       initial={{ opacity: 0 }}
       animate={{ opacity: leaving ? 0 : 1 }}
       transition={{ duration: leaving ? 0.5 : 0.45 }}
-      className="fixed inset-0 z-40 flex flex-col items-center justify-center px-4 sm:px-6 overflow-hidden"
+      className="fixed inset-0 z-40 flex flex-col items-center justify-center px-3 sm:px-6 overflow-hidden"
       style={{
         background: "linear-gradient(135deg, #D4C5B9 0%, #E8DDD0 50%, #D9CEBD 100%)",
       }}
@@ -409,11 +413,16 @@ export default function CaseOpeningGate({
               exit={{ opacity: 0, scale: 0.85 }}
               transition={{ delay: 0.9, duration: 0.5 }}
               onClick={handleOpen}
-              className="relative overflow-hidden px-10 sm:px-14 py-3 sm:py-4 font-semibold rounded-lg text-white text-sm"
+              className="relative overflow-hidden px-8 sm:px-12 py-3 font-semibold rounded-lg text-white text-sm sm:text-base w-full max-w-xs"
               style={{
                 background: `linear-gradient(135deg, ${colorConfig.accent} 0%, ${colorConfig.accent}dd 100%)`,
                 boxShadow: `0 8px 20px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.2)`,
                 border: "1px solid rgba(0,0,0,0.1)",
+                minHeight: "44px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                touchAction: "manipulation",
               }}
               whileHover={reduceMotion ? {} : {
                 scale: 1.05,

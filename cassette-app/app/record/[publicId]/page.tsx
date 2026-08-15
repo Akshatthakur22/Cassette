@@ -17,8 +17,9 @@ export default async function RecordSuccessPage({
   const tape = await getTapeByPublicId(publicId);
   if (!tape) notFound();
 
-  const VALID_STYLES = new Set(["classic", "y2k", "love", "road_trip"]);
-  const safeStyle = VALID_STYLES.has(tape.style ?? "") ? tape.style as any : "classic";
+  // Validate style against all 6 supported styles
+  const VALID_STYLES = new Set(["classic", "y2k", "love", "road_trip", "school", "summer"]);
+  const safeStyle = VALID_STYLES.has(tape.style ?? "") ? (tape.style as any) : "classic";
 
   return (
     <SendTapeClient

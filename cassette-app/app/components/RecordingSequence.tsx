@@ -174,20 +174,20 @@ export default function RecordingSequence({
 
       {/* Deck casing — responsive sizing: mobile optimized, scales up to 600px max */}
       <div
-        className="relative w-full rounded-lg sm:rounded-xl md:rounded-2xl overflow-hidden my-auto"
+        className="relative w-full rounded-md sm:rounded-lg md:rounded-xl overflow-hidden my-auto"
         style={{
-          maxWidth: "clamp(280px, 95vw, 600px)",
+          maxWidth: "clamp(270px, 92vw, 550px)",
           background: "linear-gradient(180deg, #F3EFE7 0%, #E8E0D0 100%)",
-          border: "2px solid #D9D7D1",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.10), 0 4px 12px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
+          border: "1.5px solid #D9D7D1",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.08), 0 3px 10px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.8)",
         }}
       >
         {/* Deck top bar — responsive padding */}
         <div
-          className="flex items-center justify-between px-3 sm:px-4 md:px-5 py-2 sm:py-2.5 md:py-3"
+          className="flex items-center justify-between px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 md:py-2.5"
           style={{ background: "rgba(0,0,0,0.04)", borderBottom: "1px solid #E8E5DF" }}
         >
-          <span className="text-[9px] sm:text-[10px] md:text-xs font-mono tracking-[0.2em] sm:tracking-[0.25em] uppercase" style={{ color: "#6B5E4E" }}>
+          <span className="text-[8px] sm:text-[9px] md:text-xs font-mono tracking-[0.15em] sm:tracking-[0.2em] uppercase" style={{ color: "#6B5E4E" }}>
             DECK
           </span>
           {/* REC indicator */}
@@ -355,7 +355,9 @@ export default function RecordingSequence({
                           strokeWidth="0.6"
                           opacity={recOn ? 0.5 : 0.25}
                           style={{
-                            animation: recOn ? `pulse-ring 1.2s infinite` : "none",
+                            animationName: recOn ? "pulse-ring" : "none",
+                            animationDuration: "1.2s",
+                            animationIterationCount: "infinite",
                             animationDelay: `${r * 0.05}s`,
                           }}
                         />

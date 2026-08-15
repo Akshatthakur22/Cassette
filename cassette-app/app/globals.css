@@ -468,3 +468,165 @@ body::before {
   25%       { transform: rotate(3deg) scale(1.05); }
   75%       { transform: rotate(-2deg) scale(0.97); }
 }
+
+
+/* ─── Accessibility Utilities ─────────────────────────────────────────────── */
+
+/* Screen reader only — hide visually but keep for assistive tech */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Focusable SR-only content — appears on focus */
+.sr-only-focusable:active,
+.sr-only-focusable:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+  outline: 3px solid var(--color-marigold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Remove focus outline for mouse users (but keep keyboard) */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Enhanced button focus for accessibility */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-marigold);
+  outline-offset: 2px;
+}
+
+/* Skip to main content link — appears on focus */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-marigold);
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 100;
+  font-weight: 600;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* Ensure interactive elements have minimum touch target size */
+button,
+a[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"] {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Improve link underlines for readability */
+a {
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+a:hover {
+  text-decoration-thickness: 3px;
+}
+
+/* Better form field focus states */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--color-marigold);
+  outline-offset: 1px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  body {
+    color: var(--color-ink);
+    background: #FFFFFF;
+  }
+
+  :focus-visible {
+    outline-width: 4px;
+    outline-offset: 3px;
+  }
+
+  button,
+  a {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dark mode adjustments for contrast */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1a1a1a;
+    color: #ffffff;
+  }
+
+  :focus-visible {
+    outline-color: var(--color-marigold);
+  }
+}
+
+/* Print styles for accessibility */
+@media print {
+  .sr-only {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+  }
+}

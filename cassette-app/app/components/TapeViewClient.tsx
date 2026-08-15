@@ -7,12 +7,17 @@ import CassetteInsertDeck from "./CassetteInsertDeck";
 import PlayerBar from "./PlayerBar";
 import TrackList from "./TrackList";
 import ShareButton from "./ShareButton";
+import ReportTapeButton from "./ReportTapeButton";
 import CaseOpeningGate from "./CaseOpeningGate";
 import { PosterImage } from "./PosterImage";
 import { BackgroundImage } from "./BackgroundImage";
+import { PlaylistMetadataSection } from "./PlaylistMetadataSection";
+import { PlaylistMetadataBadge } from "./PlaylistMetadataBadge";
 import { recordView } from "@/app/actions/tape";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 import { playClickSound, playFlipSound } from "@/app/lib/sounds";
+import { trackPlaylistView } from "@/app/lib/playlist-metadata";
+import { getStableImageNumber } from "@/app/lib/accessibility";
 import type { TapeWithTracks, TrackRow } from "@/app/lib/types";
 import { formatDuration } from "@/app/lib/fake-data";
 import { useReduceMotion } from "@/app/lib/use-reduce-motion";
@@ -28,6 +33,7 @@ const ACCENT_BY_STYLE: Record<string, string> = {
   sky: "#38A8E8", pool: "#1A9898", lavender: "#9060C8", mint: "#28A858",
   transparent: "#38A8E8", smoky: "#9060C8",
   classic: "#D4882A", y2k: "#D040F0", love: "#D45A6A", road_trip: "#5B7FA6",
+  school: "#4A5F8F", summer: "#F5A623",
 };
 
 /* ─── Error / Empty fallbacks ────────────────────────────────────────────── */
@@ -90,8 +96,18 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     if (!isPreview) {
       const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       recordView(tape.id, sessionId).catch(() => {});
+      
+      // Track playlist metadata if present
+      trackClientEvent(
+        "tape_viewed",
+        trackPlaylistView(tape.id, {
+          playlistSourceId: tape.playlistSourceId,
+          playlistSourceUrl: tape.playlistSourceUrl,
+          playlistName: tape.playlistName,
+        })
+      );
     }
-  }, [tape.id, isPreview]);
+  }, [tape.id, isPreview, tape.playlistSourceId, tape.playlistSourceUrl, tape.playlistName]);
 
   // Error handler
   useEffect(() => {
@@ -174,6 +190,24 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     setIsPlaying(true);
     // If they manually select a B-side track, clear the A-done gate
     if (tracks[index].side === "B") setSideADone(false);
+    // Prefetch upcoming tracks for smooth playback
+    try {
+      const { prefetchNextTracks } = require("@/app/lib/playlist-prefetch");
+      if (prefetchNextTracks) {
+        prefetchNextTracks(
+          tracks.map(t => ({
+            videoId: t.providerTrackId,
+            title: t.title,
+            durationSec: t.durationSec,
+            thumbnailUrl: t.thumbnailUrl,
+            channelTitle: t.artist,
+          })),
+          index
+        );
+      }
+    } catch (e) {
+      console.debug("Prefetch not available", e);
+    }
   }, [tracks]);
 
   // ── INSERT TAPE — handled by CassetteInsertDeck, state lives here ─────
@@ -247,7 +281,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     >
       {/* Background decorative image */}
       <BackgroundImage
-        imageNumber={Math.floor(Math.random() * 20) + 1}
+        imageNumber={getStableImageNumber(tape.id, 20)}
         opacity={0.5}
         blendMode="normal"
         position="top-right"
@@ -493,6 +527,23 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           </p>
         </motion.header>
 
+        {/* Playlist badge — shows if tape created from YouTube playlist */}
+        {(tape.playlistSourceId || tape.playlistName) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.15 }}
+            className="mt-2 sm:mt-3"
+          >
+            <PlaylistMetadataBadge
+              playlistSourceId={tape.playlistSourceId}
+              playlistSourceUrl={tape.playlistSourceUrl}
+              playlistName={tape.playlistName}
+              size="small"
+            />
+          </motion.div>
+        )}
+
         {/* Cassette + insert zone — responsive width */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 16 }}
@@ -601,6 +652,26 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           )}
         </AnimatePresence>
 
+        {/* Playlist metadata section — shows if tape created from YouTube playlist */}
+        <AnimatePresence>
+          {inserted && (tape.playlistSourceId || tape.playlistName) && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, delay: 0.25 }}
+              className="w-full max-w-sm mt-3 sm:mt-4 px-0"
+            >
+              <PlaylistMetadataSection
+                playlistSourceId={tape.playlistSourceId}
+                playlistSourceUrl={tape.playlistSourceUrl}
+                playlistName={tape.playlistName}
+                senderName={tape.senderName}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* J-card / Dedication — responsive */}
         <AnimatePresence>
           {inserted && tape.dedication && (
@@ -679,7 +750,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4, delay: 0.35 }}
-              className="mt-5"
+              className="mt-5 flex gap-2 flex-wrap"
             >
               <ShareButton
                 title={tape.title ?? "A tape was made for you"}
@@ -687,6 +758,9 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                 publicId={tape.publicId}
                 tapeId={tape.id}
               />
+              {!isPreview && (
+                <ReportTapeButton tapeId={tape.id} publicId={tape.publicId} />
+              )}
             </motion.div>
           )}
         </AnimatePresence>

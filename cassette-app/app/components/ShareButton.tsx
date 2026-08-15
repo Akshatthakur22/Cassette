@@ -3,18 +3,21 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { recordShare } from "@/app/actions/tape";
+import { shareTowardsPlatform, SHARE_PLATFORMS, getPlatformColor } from "@/app/lib/share-platforms";
 
 interface ShareButtonProps {
   title: string;
   senderName: string;
   publicId: string;
   tapeId: string;
+  recipientName?: string;
   onShare?: (platform: string) => void;
 }
 
-export default function ShareButton({ title, senderName, publicId, tapeId, onShare }: ShareButtonProps) {
+export default function ShareButton({ title, senderName, publicId, tapeId, recipientName, onShare }: ShareButtonProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sharedPlatform, setSharedPlatform] = useState<string | null>(null);
 
   const domain =
     process.env.NEXT_PUBLIC_DOMAIN ||
@@ -26,21 +29,37 @@ export default function ShareButton({ title, senderName, publicId, tapeId, onSha
     recordShare(tapeId, platform).catch(() => {});
     onShare?.(platform);
 
-    if (platform === "native" && navigator.share) {
-      try {
-        await navigator.share({ title: title || "A tape was made for you", text: shareText, url: tapeUrl });
-      } catch {}
-    } else if (platform === "whatsapp") {
-      window.open(`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${tapeUrl}`)}`, "_blank");
-    } else if (platform === "copy") {
-      await navigator.clipboard.writeText(tapeUrl);
+    const result = await shareTowardsPlatform(platform, {
+      url: tapeUrl,
+      title: title || "A tape was made for you",
+      text: shareText,
+      recipientName,
+      tapeId,
+    });
+
+    if (platform === "copy" && result.success) {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setSharedPlatform(platform);
+      setTimeout(() => {
+        setCopied(false);
+        setSharedPlatform(null);
+      }, 2000);
     }
     setShowMenu(false);
   }
 
   const hasNativeShare = typeof navigator !== "undefined" && !!navigator.share;
+  
+  // Curated list of most important platforms to show
+  const priorityPlatforms = [
+    hasNativeShare && "native",
+    "whatsapp",
+    "x",
+    "telegram",
+    "facebook",
+    "email",
+    "copy",
+  ].filter(Boolean) as string[];
 
   return (
     <div className="relative">
@@ -78,19 +97,25 @@ export default function ShareButton({ title, senderName, publicId, tapeId, onSha
               background: "#FFFFFF",
               border: "1px solid #E8E5DF",
               boxShadow: "0 8px 24px rgba(0,0,0,0.1)",
-              minWidth: "160px",
+              minWidth: "180px",
             }}
             role="menu"
           >
-            {hasNativeShare && (
-              <ShareMenuItem label="Share…" onClick={() => handleShare("native")} />
-            )}
-            <ShareMenuItem label="WhatsApp" onClick={() => handleShare("whatsapp")} />
-            <ShareMenuItem
-              label={copied ? "✓ Copied!" : "Copy link"}
-              onClick={() => handleShare("copy")}
-              accent={copied}
-            />
+            {priorityPlatforms.map((platform) => {
+              const config = SHARE_PLATFORMS[platform];
+              if (!config) return null;
+              
+              return (
+                <ShareMenuItem
+                  key={platform}
+                  platform={platform}
+                  config={config}
+                  onClick={() => handleShare(platform)}
+                  isSelected={sharedPlatform === platform}
+                  isCopied={copied && platform === "copy"}
+                />
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -99,27 +124,35 @@ export default function ShareButton({ title, senderName, publicId, tapeId, onSha
 }
 
 function ShareMenuItem({
-  label,
+  platform,
+  config,
   onClick,
-  accent = false,
+  isSelected = false,
+  isCopied = false,
 }: {
-  label: string;
+  platform: string;
+  config: any;
   onClick: () => void;
-  accent?: boolean;
+  isSelected?: boolean;
+  isCopied?: boolean;
 }) {
+  const label = isCopied && platform === "copy" ? "✓ Copied!" : config.label;
+  
   return (
     <button
       onClick={onClick}
-      className="w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-gray-50"
+      className="w-full px-4 py-2.5 text-sm text-left transition-colors hover:bg-gray-50 flex items-center gap-3"
       style={{
-        color: accent ? "#28A858" : "#3D3D3F",
+        color: isCopied ? "#28A858" : config.color || "#3D3D3F",
         fontFamily: "var(--font-inter, Inter, sans-serif)",
         borderBottom: "1px solid #F3EFE7",
-        background: "transparent",
+        background: isSelected ? "#F9F8F5" : "transparent",
       }}
       role="menuitem"
+      aria-label={`Share via ${config.label}`}
     >
-      {label}
+      <span>{config.icon}</span>
+      <span>{label}</span>
     </button>
   );
 }

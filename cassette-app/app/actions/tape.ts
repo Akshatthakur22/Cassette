@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/app/lib/prisma";
 import { generatePublicId, generateDraftToken, DRAFT_COOKIE } from "@/app/lib/tokens";
 import type { TapeStyle, TapeRelationship, TrackInput } from "@/app/lib/types";
+import { checkContentForSpam, checkForDuplicates } from "@/app/lib/safety";
 
 /** Extract the real client IP from common proxy headers */
 async function getClientIp(): Promise<string> {
@@ -58,6 +59,7 @@ export async function createDraft(formData: FormData) {
   const recipientName = (formData.get("recipientName") as string | null)?.trim() || null;
   const title         = (formData.get("title")         as string | null)?.trim() || null;
   const dedication    = (formData.get("dedication")    as string | null)?.trim().slice(0, 500) || null;
+  const createdFromTapeId = (formData.get("fromTapeId") as string | null) || null;
 
   if (!senderName) {
     return { error: "Please enter your name." };
@@ -102,6 +104,7 @@ export async function createDraft(formData: FormData) {
       relationship,
       style,
       status: "draft",
+      createdFromTapeId,
     },
   });
 
@@ -120,6 +123,7 @@ export async function createDraft(formData: FormData) {
     style,
     relationship,
     hasRecipient: !!recipientName,
+    isReply: !!createdFromTapeId,
   }).catch(err => console.warn("PostHog tracking error:", err));
 
   redirect(`/create/${tape.id}`);
@@ -199,26 +203,42 @@ export async function addTracksFromPlaylist(
     return { error: "No items to add." };
   }
 
-  // Distribute tracks across Side A and B
-  let sideACount = await prisma.tapeTrack.count({ where: { tapeId: draftId, side: "A" } });
-  let sideBCount = await prisma.tapeTrack.count({ where: { tapeId: draftId, side: "B" } });
+  // Get current track counts per side
+  const sideACounts = await prisma.tapeTrack.findMany({
+    where: { tapeId: draftId, side: "A" },
+    select: { position: true },
+    orderBy: { position: "desc" },
+    take: 1,
+  });
+  const sideBCounts = await prisma.tapeTrack.findMany({
+    where: { tapeId: draftId, side: "B" },
+    select: { position: true },
+    orderBy: { position: "desc" },
+    take: 1,
+  });
+
+  let sideAPos = sideACounts.length > 0 ? sideACounts[0].position + 1 : 0;
+  let sideBPos = sideBCounts.length > 0 ? sideBCounts[0].position + 1 : 0;
 
   const createdTracks = [];
 
   for (const item of items) {
-    // Determine which side to add to (balance them)
-    const side = sideACount <= sideBCount ? "A" : "B";
-    const isA = side === "A";
+    // Try to add to whichever side has fewer tracks
+    let side: "A" | "B";
+    let position: number;
 
-    // Check if side is full
-    const currentCount = isA ? sideACount : sideBCount;
-    if (currentCount >= 12) {
-      // Skip this item, side is full
+    if (sideAPos < 12 && sideAPos <= sideBPos) {
+      side = "A";
+      position = sideAPos;
+      sideAPos++;
+    } else if (sideBPos < 12) {
+      side = "B";
+      position = sideBPos;
+      sideBPos++;
+    } else {
+      // Both sides full, skip
       continue;
     }
-
-    // Get the position for this side
-    const position = currentCount;
 
     const created = await prisma.tapeTrack.create({
       data: {
@@ -234,14 +254,7 @@ export async function addTracksFromPlaylist(
     });
 
     createdTracks.push(created);
-
-    // Update counts
-    if (isA) sideACount++;
-    else sideBCount++;
   }
-
-  // Playlist metadata will be stored once database is migrated
-  // For now, we only track individual tracks
 
   // Track the event
   const { trackEvent, EVENTS } = await import("@/app/lib/posthog");
@@ -274,16 +287,28 @@ export async function deleteTrack(draftId: string, trackId: string) {
   const tape = await getVerifiedTape(draftId);
   if (!tape) return { error: "Unauthorized." };
 
-  await prisma.tapeTrack.deleteMany({ where: { id: trackId, tapeId: draftId } });
-
-  // Re-number remaining tracks on that side
-  const side = (await prisma.tapeTrack.findFirst({ where: { tapeId: draftId } }))?.side ?? "A";
-  const remaining = await prisma.tapeTrack.findMany({
-    where: { tapeId: draftId },
-    orderBy: [{ side: "asc" }, { position: "asc" }],
+  // Get the side of the track being deleted
+  const deletedTrack = await prisma.tapeTrack.findFirst({
+    where: { id: trackId, tapeId: draftId },
+    select: { side: true },
   });
+
+  if (!deletedTrack) return { error: "Track not found." };
+
+  // Delete the track
+  await prisma.tapeTrack.delete({ where: { id: trackId } });
+
+  // Re-number remaining tracks on that specific side only
+  const remaining = await prisma.tapeTrack.findMany({
+    where: { tapeId: draftId, side: deletedTrack.side },
+    orderBy: { position: "asc" },
+  });
+
   for (let i = 0; i < remaining.length; i++) {
-    await prisma.tapeTrack.update({ where: { id: remaining[i].id }, data: { position: i } });
+    await prisma.tapeTrack.update({
+      where: { id: remaining[i].id },
+      data: { position: i },
+    });
   }
 
   return { ok: true };
@@ -299,10 +324,24 @@ export async function reorderTracks(
   const tape = await getVerifiedTape(draftId);
   if (!tape) return { error: "Unauthorized." };
 
+  // Validate all IDs belong to this tape and side
+  const tracks = await prisma.tapeTrack.findMany({
+    where: { tapeId: draftId, side },
+    select: { id: true },
+  });
+  const validIds = new Set(tracks.map(t => t.id));
+
+  for (const id of orderedIds) {
+    if (!validIds.has(id)) {
+      return { error: "Invalid track ID for this side." };
+    }
+  }
+
+  // Update positions
   await Promise.all(
     orderedIds.map((id, idx) =>
-      prisma.tapeTrack.updateMany({
-        where: { id, tapeId: draftId, side },
+      prisma.tapeTrack.update({
+        where: { id },
         data: { position: idx },
       })
     )
@@ -322,6 +361,23 @@ export async function publishTape(draftId: string) {
   const trackCount = await prisma.tapeTrack.count({ where: { tapeId: draftId } });
   if (trackCount === 0) return { error: "Add at least one track before publishing." };
 
+  // Check for spam/malicious content
+  const spamCheck = checkContentForSpam(tape.title, tape.dedication, tape.senderName);
+  if (spamCheck.isSpam) {
+    return { 
+      error: "Your tape was flagged as potentially spam. Please review the content and try again.",
+      reason: spamCheck.reason 
+    };
+  }
+
+  // Check for duplicates
+  const { isDuplicate } = await checkForDuplicates(tape.senderName, tape.title);
+  if (isDuplicate) {
+    return { 
+      error: "You've recently created a very similar tape. Please make sure your tape is unique."
+    };
+  }
+
   await prisma.tape.update({
     where: { id: draftId },
     data: { status: "published" },
@@ -333,6 +389,7 @@ export async function publishTape(draftId: string) {
     tapeId: tape.publicId,
     trackCount,
     style: tape.style,
+    spamScore: spamCheck.score,
   }).catch(err => console.warn("PostHog tracking error:", err));
 
   return { ok: true, publicId: tape.publicId };
@@ -364,6 +421,20 @@ export async function getTapeForEditor(draftId: string) {
   const tracks = await prisma.tapeTrack.findMany({
     where: { tapeId: draftId },
     orderBy: [{ side: "asc" }, { position: "asc" }],
+    select: {
+      id: true,
+      tapeId: true,
+      side: true,
+      position: true,
+      title: true,
+      artist: true,
+      thumbnailUrl: true,
+      provider: true,
+      providerTrackId: true,
+      personalNote: true,
+      durationSec: true,
+      createdAt: true,
+    },
   });
 
   return { ...tape, tracks };
@@ -410,23 +481,10 @@ export async function getTapeByPublicId(publicId: string) {
     
     const tape = await prisma.tape.findUnique({
       where: { publicId },
-      select: {
-        id: true,
-        publicId: true,
-        draftToken: true,
-        title: true,
-        dedication: true,
-        senderName: true,
-        recipientName: true,
-        relationship: true,
-        style: true,
-        visibility: true,
-        memoryDate: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        deletedAt: true,
-        tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
+      include: {
+        tracks: {
+          orderBy: [{ side: "asc" }, { position: "asc" }],
+        },
       },
     });
 
@@ -516,4 +574,42 @@ export async function recordView(tapeId: string, sessionId: string) {
   trackEvent(sessionId, EVENTS.TAPE_VIEWED, {
     tapeId,
   }).catch(err => console.warn("PostHog tracking error:", err));
+}
+
+// ─── recordContentReport ──────────────────────────────────────────────────────
+
+export async function recordContentReport(
+  tapeId: string,
+  sessionId: string,
+  reason: "inappropriate" | "spam" | "copyright" | "harassment" | "other",
+  details?: string
+) {
+  try {
+    const report = await prisma.contentReport.create({
+      data: {
+        tapeId,
+        reporterSessionId: sessionId,
+        reason,
+        details: details?.slice(0, 200) || null,
+        status: "pending",
+      },
+    });
+
+    // If this is the 3rd+ report, auto-flag tape for review
+    const reportCount = await prisma.contentReport.count({
+      where: { tapeId, status: { in: ["pending", "reviewed"] } },
+    });
+
+    if (reportCount >= 3) {
+      await prisma.tape.update({
+        where: { id: tapeId },
+        data: { flaggedForReview: true },
+      });
+    }
+
+    return { ok: true, reportId: report.id };
+  } catch (error) {
+    console.error("Error recording report:", error);
+    return { error: "Failed to submit report" };
+  }
 }

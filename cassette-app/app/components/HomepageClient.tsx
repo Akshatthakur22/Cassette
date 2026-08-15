@@ -95,7 +95,7 @@ function TopNav() {
 function HeroSection() {
   return (
     <section className="relative w-full py-4 sm:py-8 md:py-12 lg:py-16 overflow-visible">
-      {/* Scattered poster images for nostalgic aesthetic — hidden on mobile */}
+      {/* Scattered poster images for nostalgic aesthetic — desktop only */}
       <div className="absolute -top-16 -left-16 z-0 opacity-60 hidden sm:block">
         <PosterImage imageNumber={1} width={70} height={100} rotation={-15} />
       </div>
@@ -623,7 +623,23 @@ export default function HomepageClient({ tapes }: HomepageClientProps) {
 
             {/* Shelf + empty state */}
             {tapes.length > 0 ? (
-              <CassetteShelf tapes={tapes} perRow={6} />
+              <>
+                {/* Mobile doodles — show small doodles on sides of shelf on mobile */}
+                <div className="relative">
+                  {/* Left doodle — mobile only */}
+                  <div className="absolute -left-8 top-8 z-0 opacity-50 sm:hidden block">
+                    <PosterImage imageNumber={1} width={50} height={70} rotation={-20} />
+                  </div>
+                  
+                  {/* Right doodle — mobile only */}
+                  <div className="absolute -right-8 top-1/2 z-0 opacity-50 sm:hidden block">
+                    <PosterImage imageNumber={2} width={55} height={75} rotation={15} />
+                  </div>
+                  
+                  {/* Shelf */}
+                  <CassetteShelf tapes={tapes} perRow={6} />
+                </div>
+              </>
             ) : (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
@@ -672,10 +688,24 @@ export default function HomepageClient({ tapes }: HomepageClientProps) {
         </section>
 
         {/* ── SECTION DIVIDER WITH POSTER IMAGES ─────────────────────────── */}
-        <div className="py-12 sm:py-16 flex justify-center gap-6 sm:gap-10 flex-wrap">
-          <PosterImage imageNumber={4} width={100} height={140} rotation={-12} opacity={0.95} />
-          <PosterImage imageNumber={5} width={95} height={135} rotation={8} opacity={0.92} />
-          <PosterImage imageNumber={6} width={105} height={145} rotation={-5} opacity={0.95} />
+        <div className="relative py-8 sm:py-12 lg:py-16">
+          {/* Spacer gradient on mobile */}
+          <div className="sm:hidden h-8 bg-gradient-to-b from-white/0 to-white/0 mb-4" aria-hidden="true" />
+          
+          {/* Mobile-friendly subtitle */}
+          <p className="sm:hidden text-center text-xs mb-6" style={{ color: "#8A7A68" }}>
+            ✨ More from CASSETTE ✨
+          </p>
+          
+          <div className="flex justify-center gap-4 sm:gap-6 lg:gap-10 flex-wrap px-2 sm:px-0">
+            <PosterImage imageNumber={4} width={80} height={110} rotation={-12} opacity={0.95} className="hidden sm:block" />
+            <PosterImage imageNumber={5} width={75} height={105} rotation={8} opacity={0.92} className="hidden sm:block" />
+            <PosterImage imageNumber={6} width={85} height={115} rotation={-5} opacity={0.95} className="hidden sm:block" />
+            
+            {/* Mobile compact doodles */}
+            <PosterImage imageNumber={4} width={60} height={85} rotation={-12} opacity={0.85} className="sm:hidden" />
+            <PosterImage imageNumber={5} width={60} height={85} rotation={8} opacity={0.85} className="sm:hidden" />
+          </div>
         </div>
 
         {/* ── DISCOVER & SHARE SECTION ──────────────────────────────────────── */}

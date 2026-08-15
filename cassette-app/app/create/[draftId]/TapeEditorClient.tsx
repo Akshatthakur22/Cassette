@@ -10,6 +10,13 @@ import { BackgroundImage } from "@/app/components/BackgroundImage";
 import { PlaylistSearchModal } from "@/app/components/PlaylistSearchModal";
 import { PlaylistItemSelector } from "@/app/components/PlaylistItemSelector";
 import { YoutubeSearchBar } from "@/app/components/YoutubeSearchBar";
+import { VoiceRecorder } from "@/app/components/VoiceRecorder";
+import YoutubeUrlValidator from "@/app/components/YoutubeUrlValidator";
+import YoutubeSearchAdvanced from "@/app/components/YoutubeSearchAdvanced";
+import TrackDurationValidator from "@/app/components/TrackDurationValidator";
+import { RECORDING_MODES, RecordingMode } from "@/app/lib/recording-types";
+import { detectDuplicate, getDuplicateWarningMessage, type TrackFingerprint } from "@/app/lib/remix-detection";
+import { getStableImageNumber } from "@/app/lib/accessibility";
 import {
   updateTapeMeta,
   addTrack,
@@ -35,11 +42,13 @@ const TAPE_STYLES = [
   { value: "mint",        label: "Mint",        color: "#34C759" },
   { value: "transparent", label: "Clear",       color: "rgba(200,220,240,0.7)" },
   { value: "smoky",       label: "Smoky",       color: "#2E2A30" },
-  // Legacy
+  // Design styles
   { value: "classic",     label: "Classic",     color: "#C8A96E" },
   { value: "y2k",         label: "Y2K",         color: "#E040FB" },
   { value: "love",        label: "Love",        color: "#D45A6A" },
   { value: "road_trip",   label: "Road Trip",   color: "#5B7FA6" },
+  { value: "school",      label: "School",      color: "#4A5F8F" },
+  { value: "summer",      label: "Summer",      color: "#F5A623" },
 ] as const;
 
 interface Props { tape: TapeWithTracks; }
@@ -48,8 +57,10 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
   const router = useRouter();
   const [tape, setTape] = useState(initialTape);
   const [activeSide, setActiveSide] = useState<"A" | "B">("A");
+  const [recordingMode, setRecordingMode] = useState<RecordingMode>(RecordingMode.STANDARD);
   const [showMeta, setShowMeta] = useState(false);
   const [showAddTrack, setShowAddTrack] = useState(false);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -202,7 +213,7 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
     <div className="relative min-h-screen overflow-y-auto overflow-x-hidden" style={{ background: "#FBFAF7" }}>
       {/* Background decorative image */}
       <BackgroundImage
-        imageNumber={Math.floor(Math.random() * 13) + 1}
+        imageNumber={getStableImageNumber(tape.id, 13)}
         opacity={0.25}
         position="bottom-left"
       />
@@ -483,6 +494,47 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
           ))}
         </div>
 
+        {/* Recording Mode Selector */}
+        <div className="w-full">
+          <p className="text-xs uppercase tracking-widest mb-2" style={{ color: "#8E8E93", fontFamily: "monospace" }}>
+            Recording Mode
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(RECORDING_MODES).map(([mode, config]) => (
+              <button
+                key={mode}
+                onClick={() => setRecordingMode(mode as RecordingMode)}
+                className="flex-1 min-w-fit px-4 py-2.5 rounded-lg text-xs font-medium transition-all text-center whitespace-nowrap"
+                style={{
+                  background: recordingMode === mode 
+                    ? "linear-gradient(135deg, #D4882A, #C4503A)"
+                    : "#F3EFE7",
+                  color: recordingMode === mode ? "#FFFFFF" : "#5F6065",
+                  border: recordingMode === mode ? "1px solid #C4503A" : "1px solid #E8E5DF",
+                  fontWeight: recordingMode === mode ? 600 : 500,
+                  minHeight: "44px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  boxShadow: recordingMode === mode ? "0 2px 8px rgba(212,136,42,0.25)" : "none",
+                }}
+                title={config.description}
+              >
+                {config.label}
+              </button>
+            ))}
+          </div>
+          {RECORDING_MODES[recordingMode] && (
+            <p className="text-xs mt-2" style={{ 
+              color: "#8E8E93",
+              fontStyle: "italic",
+              fontFamily: "monospace",
+            }}>
+              💡 {RECORDING_MODES[recordingMode].description}
+            </p>
+          )}
+        </div>
+
         {/* Track list — drag-and-drop friendly, responsive */}
         <div className="w-full max-h-96 overflow-y-auto overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
           <Reorder.Group
@@ -617,22 +669,85 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
           </Reorder.Group>
 
           {/* Add track */}
-          {sideTracks.length < 12 && (
+          {sideTracks.length < RECORDING_MODES[recordingMode].maxTracksPerSide && (
             <div className="mt-3 space-y-2">
+              {/* Voice Recording Option */}
+              {recordingMode === RecordingMode.VOICE && !showVoiceRecorder && (
+                <motion.button
+                  onClick={() => setShowVoiceRecorder(true)}
+                  className="w-full py-3 rounded-xl text-sm font-semibold transition-all hover:opacity-90 active:scale-[0.97]"
+                  style={{
+                    background: "linear-gradient(135deg, #D4882A 0%, #C4503A 100%)",
+                    border: "none",
+                    color: "#FFFFFF",
+                    fontFamily: "var(--font-inter, Inter, sans-serif)",
+                    boxShadow: "0 4px 12px rgba(212,136,42,0.3)",
+                    minHeight: "44px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    letterSpacing: "0.3px",
+                  }}
+                  whileHover={{ boxShadow: "0 6px 16px rgba(212,136,42,0.4)" }}
+                  whileTap={{ scale: 0.97 }}
+                >
+                  🎤 Record Your Voice
+                </motion.button>
+              )}
+
+              {/* Voice Recorder Component */}
+              {showVoiceRecorder && recordingMode === RecordingMode.VOICE && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  className="rounded-2xl p-4"
+                  style={{ background: "#FFFFFF", border: "1px solid #E8E5DF", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                >
+                  <VoiceRecorder
+                    tapeId={tape.id}
+                    onRecordingComplete={(url, duration, trackId) => {
+                      console.log("[TapeEditorClient] Recording complete:", { url, duration, trackId });
+                      setShowVoiceRecorder(false);
+                      // The track is already created in the API, just refresh to get it from DB
+                      // For now, add optimistically - backend already created it
+                      setTape(prev => ({
+                        ...prev,
+                        tracks: [...prev.tracks, {
+                          id: trackId || `voice-${Date.now()}`,
+                          tapeId: tape.id,
+                          title: `Voice Recording - ${new Date().toLocaleTimeString()}`,
+                          artist: "You",
+                          side: activeSide,
+                          position: sideTracks.length,
+                          provider: "voice",
+                          providerTrackId: trackId || `voice-${Date.now()}`,
+                          durationSec: Math.round(duration),
+                          personalNote: null,
+                          createdAt: new Date(),
+                          thumbnailUrl: undefined,
+                        } as any]
+                      }));
+                    }}
+                  />
+                </motion.div>
+              )}
+
               {/* Add from playlist button */}
-              <motion.button
-                onClick={() => setShowPlaylistSearch(true)}
-                className="w-full py-3 rounded-xl text-sm transition-all hover:opacity-80 active:scale-[0.98]"
-                style={{
-                  background: "rgba(212, 136, 42, 0.08)",
-                  border: "1.5px dashed #D4882A",
-                  color: "#D4882A",
-                  fontFamily: "var(--font-inter, Inter, sans-serif)",
-                }}
-                whileHover={{ borderColor: "#C67820", color: "#C67820" }}
-              >
-                🎵 Add from Playlist
-              </motion.button>
+              {recordingMode !== RecordingMode.VOICE && (
+                <motion.button
+                  onClick={() => setShowPlaylistSearch(true)}
+                  className="w-full py-3 rounded-xl text-sm transition-all hover:opacity-80 active:scale-[0.98]"
+                  style={{
+                    background: "rgba(212, 136, 42, 0.08)",
+                    border: "1.5px dashed #D4882A",
+                    color: "#D4882A",
+                    fontFamily: "var(--font-inter, Inter, sans-serif)",
+                  }}
+                  whileHover={{ borderColor: "#C67820", color: "#C67820" }}
+                >
+                  🎵 Add from Playlist
+                </motion.button>
+              )}
 
               {/* Add single track button */}
               {!showAddTrack ? (
@@ -659,13 +774,14 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
                   isPending={isPending}
                   activeSide={activeSide}
                   onCancel={() => { setShowAddTrack(false); setTrackError(null); }}
+                  existingTracks={sideTracks}
                 />
               )}
             </div>
           )}
-          {sideTracks.length >= 12 && (
+          {sideTracks.length >= RECORDING_MODES[recordingMode].maxTracksPerSide && (
             <p className="text-center text-xs mt-3" style={{ color: "#8E8E93", fontFamily: "monospace" }}>
-              Side {activeSide} is full (12/12)
+              Side {activeSide} is full ({sideTracks.length}/{RECORDING_MODES[recordingMode].maxTracksPerSide})
             </p>
           )}
         </div>
@@ -726,17 +842,22 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
         </AnimatePresence>
 
         {/* Record tape CTA — bottom of page */}
-        <div className="w-full pt-4 flex flex-col items-center gap-2">
+        <div className="w-full pt-3 sm:pt-4 flex flex-col items-center gap-1.5 sm:gap-2">
           <motion.button
             onClick={handlePublish}
             disabled={isPending}
             whileTap={{ scale: 0.95 }}
-            className="w-full py-4 rounded-full font-semibold text-sm disabled:opacity-50"
+            className="w-full py-3 sm:py-3.5 rounded-full font-semibold text-sm sm:text-base disabled:opacity-50"
             style={{
               background: "linear-gradient(135deg, #D4882A 0%, #C4503A 100%)",
               color: "#FFFFFF",
               fontFamily: "var(--font-inter, Inter, sans-serif)",
               boxShadow: "0 4px 24px rgba(212,136,42,0.28)",
+              minHeight: "44px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              touchAction: "manipulation",
             }}
           >
             {isPending ? "Recording…" : "⏺ Record Tape"}
@@ -772,20 +893,47 @@ interface SearchResult {
   videoId: string; title: string; channelTitle: string; thumbnailUrl: string; durationSec?: number;
 }
 
-function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackError, isPending, activeSide, onCancel }:
+function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackError, isPending, activeSide, onCancel, existingTracks = [] }:
   { onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
     newTrack: any; setNewTrack: (t: any) => void;
     trackError: string | null; setTrackError: (e: string | null) => void;
-    isPending: boolean; activeSide: "A" | "B"; onCancel: () => void; }) {
+    isPending: boolean; activeSide: "A" | "B"; onCancel: () => void; existingTracks?: TrackRow[]; }) {
   const [manualEntry, setManualEntry] = useState(false);
+  const [useAdvancedSearch, setUseAdvancedSearch] = useState(false);
+  const [useUrlValidator, setUseUrlValidator] = useState(false);
 
   function handleSearchResult(result: any) {
+    const fingerprint: TrackFingerprint = {
+      videoId: result.videoId,
+      title: result.title,
+      artistName: result.channelTitle,
+      duration: result.durationSec || 0,
+    };
+    const existingFingerprints: TrackFingerprint[] = existingTracks.map(t => ({
+      videoId: t.providerTrackId,
+      title: t.title,
+      artistName: t.artist || "Unknown",
+      duration: t.durationSec || 0,
+    }));
+    const duplicateCheck = detectDuplicate(fingerprint, existingFingerprints);
+    if (duplicateCheck.isDuplicate) {
+      setTrackError(getDuplicateWarningMessage(duplicateCheck.similarity, duplicateCheck.matchedTrack));
+      return;
+    }
+    setTrackError(null);
     setNewTrack({
       title: result.title,
       artist: result.channelTitle,
       providerTrackId: result.videoId,
       durationSec: result.durationSec?.toString() ?? "",
     });
+  }
+
+  function handleUrlValidate(videoId: string) {
+    setNewTrack((p: any) => ({ ...p, providerTrackId: videoId }));
+    setUseUrlValidator(false);
+    setUseAdvancedSearch(false);
+    setManualEntry(false);
   }
 
   return (
@@ -800,8 +948,58 @@ function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackErr
         🎵 Add to Side {activeSide}
       </p>
 
-      {/* Use the new search bar for better UX */}
-      {!manualEntry && (
+      {/* Search mode tabs */}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => { setUseAdvancedSearch(false); setUseUrlValidator(false); setManualEntry(false); }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${!useAdvancedSearch && !useUrlValidator && !manualEntry ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
+          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          Search
+        </button>
+        <button
+          type="button"
+          onClick={() => { setUseUrlValidator(true); setUseAdvancedSearch(false); setManualEntry(false); }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${useUrlValidator ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
+          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          URL
+        </button>
+        <button
+          type="button"
+          onClick={() => { setUseAdvancedSearch(true); setUseUrlValidator(false); setManualEntry(false); }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${useAdvancedSearch ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
+          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          Advanced
+        </button>
+      </div>
+
+      {/* URL Validator */}
+      {useUrlValidator && (
+        <div>
+          <YoutubeUrlValidator onValidUrl={handleUrlValidate} onError={setTrackError} />
+        </div>
+      )}
+
+      {/* Advanced Search */}
+      {useAdvancedSearch && (
+        <div>
+          <YoutubeSearchAdvanced onSelect={(result) => {
+            handleSearchResult({
+              videoId: result.videoId,
+              title: result.title,
+              channelTitle: result.channelTitle,
+              durationSec: result.durationSec,
+            });
+            setUseAdvancedSearch(false);
+          }} type="song" />
+        </div>
+      )}
+
+      {/* Standard search */}
+      {!useAdvancedSearch && !useUrlValidator && !manualEntry && (
         <div>
           <YoutubeSearchBar
             onSelectResult={handleSearchResult}
@@ -849,6 +1047,15 @@ function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackErr
             ← Back to search
           </button>
         </>
+      )}
+
+      {/* Track Duration Validator */}
+      {newTrack.durationSec && (
+        <TrackDurationValidator
+          durationSec={parseInt(newTrack.durationSec)}
+          title={newTrack.title}
+          showDetails
+        />
       )}
 
       {trackError && <p className="text-xs" style={{ color: "#C4503A" }}>{trackError}</p>}

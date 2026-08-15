@@ -1,0 +1,20 @@
+# Cassette — Digital Mixtape Platform
+# Allow search engines to crawl our public tapes and main pages
+
+User-agent: *
+Allow: /
+Allow: /shelf
+Allow: /t/
+
+# Disallow private/admin areas
+Disallow: /create/
+Disallow: /record/
+Disallow: /manage/
+Disallow: /api/
+Disallow: /.next/
+
+# Crawl delay (respectful crawling)
+Crawl-delay: 1
+
+# Sitemap
+Sitemap: https://cassette.fm/sitemap.xml

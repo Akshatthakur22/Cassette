@@ -12,9 +12,14 @@ const nextConfig: NextConfig = {
   // Optimize for serverless
   poweredByHeader: false,
   
-  // Configure image qualities for next/image
+  // Configure image optimization - enable WebP/AVIF
   images: {
-    qualities: [75, 80, 85],
+    formats: ["image/avif", "image/webp"],
+    minimumCacheTTL: 60 * 60 * 24 * 365, // 1 year
+    deviceSizes: [320, 420, 640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    qualities: [75, 80, 85, 90],
+    dangerouslyAllowSVG: true,
   },
   
   // Ensure proper headers for caching
@@ -26,6 +31,28 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/images/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+          {
+            key: 'Content-Type',
+            value: 'image/:format',
+          },
+        ],
+      },
+      {
+        source: '/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
           },
         ],
       },

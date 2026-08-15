@@ -55,6 +55,9 @@ export default function CreateStartClient() {
     const fd = new FormData(e.currentTarget);
     fd.set("relationship", relationship);
     fd.set("style", style);
+    if (fromTapeId) {
+      fd.set("fromTapeId", fromTapeId);
+    }
     try {
       const result = await createDraft(fd);
       if (result?.error) { setError(result.error); setIsPending(false); return; }

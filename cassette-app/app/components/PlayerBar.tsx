@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { type Track, formatDuration } from "@/app/lib/fake-data";
 import { playClickSound, playSkipSound, playSeekSound } from "@/app/lib/sounds";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
+import { updateBackgroundPlaybackState, updateMediaSession, clearMediaSession, initBackgroundPlayback } from "@/app/lib/background-playback";
 
 declare global {
   interface Window {
@@ -301,6 +302,7 @@ export default function PlayerBar({
   const track = tracks[currentIndex];
   const playerDivId = "yt-player-cassette";
   const playerRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const apiReadyRef = useRef(false);
   const initPendingRef = useRef(false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -311,9 +313,21 @@ export default function PlayerBar({
   const [ytReady, setYtReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Initialize background playback on first mount
+  useEffect(() => {
+    initBackgroundPlayback();
+  }, []);
+
   useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
   useEffect(() => { onNextRef.current = onNext; }, [onNext]);
   useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
+
+  // Clear media session when not playing
+  useEffect(() => {
+    if (!isPlaying) {
+      clearMediaSession();
+    }
+  }, [isPlaying]);
 
   // ── Load YouTube IFrame API once ─────────────────────────────────────────
   useEffect(() => {
@@ -363,7 +377,19 @@ export default function PlayerBar({
     } catch { initPendingRef.current = false; }
   }, []);
 
-  useEffect(() => { if (ytReady && track?.providerTrackId) createPlayer(track.providerTrackId); }, [ytReady, createPlayer, track]);
+  useEffect(() => { if (ytReady && track?.providerTrackId && track?.provider === "youtube") createPlayer(track.providerTrackId); }, [ytReady, createPlayer, track?.providerTrackId, track?.provider]);
+
+  // Load voice recording audio
+  useEffect(() => {
+    if (!audioRef.current || track?.provider !== "voice") return;
+    
+    // Construct the audio URL from the track's providerTrackId (which is the trackId)
+    const audioUrl = `/voice-recordings/${track.providerTrackId}.webm`;
+    console.log("[PlayerBar] Loading voice recording:", { trackId: track.providerTrackId, url: audioUrl });
+    
+    audioRef.current.src = audioUrl;
+    audioRef.current.load();
+  }, [track?.providerTrackId, track?.provider]);
 
   useEffect(() => {
     if (!playerRef.current || !track?.providerTrackId) return;
@@ -375,17 +401,47 @@ export default function PlayerBar({
   }, [track?.id]);
 
   useEffect(() => {
-    if (!playerRef.current) return;
-    try { if (isPlaying) playerRef.current.playVideo(); else playerRef.current.pauseVideo(); } catch {}
-  }, [isPlaying]);
+    // Handle YouTube playback
+    if (track?.provider === "youtube" && playerRef.current) {
+      try { 
+        if (isPlaying) playerRef.current.playVideo(); 
+        else playerRef.current.pauseVideo(); 
+      } catch {}
+    }
+    
+    // Handle voice recording playback
+    if (track?.provider === "voice" && audioRef.current) {
+      try {
+        if (isPlaying) {
+          audioRef.current.play().catch(e => console.error("[PlayerBar] Audio play error:", e));
+        } else {
+          audioRef.current.pause();
+        }
+      } catch (e) {
+        console.error("[PlayerBar] Audio control error:", e);
+      }
+    }
+  }, [isPlaying, track?.provider]);
 
   useEffect(() => {
-    if (!playerRef.current || !track) return;
-    const targetSec = progress * track.durationSec;
-    try {
-      const cur = playerRef.current.getCurrentTime?.() ?? 0;
-      if (Math.abs(cur - targetSec) > 2) playerRef.current.seekTo(targetSec, true);
-    } catch {}
+    // YouTube seeking
+    if (track?.provider === "youtube" && playerRef.current) {
+      const targetSec = progress * track.durationSec;
+      try {
+        const cur = playerRef.current.getCurrentTime?.() ?? 0;
+        if (Math.abs(cur - targetSec) > 2) playerRef.current.seekTo(targetSec, true);
+      } catch {}
+    }
+    
+    // Voice recording seeking
+    if (track?.provider === "voice" && audioRef.current) {
+      const targetSec = progress * track.durationSec;
+      try {
+        if (Math.abs(audioRef.current.currentTime - targetSec) > 0.5) {
+          audioRef.current.currentTime = targetSec;
+        }
+      } catch {}
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress]);
 
@@ -393,15 +449,42 @@ export default function PlayerBar({
     if (tickRef.current) clearInterval(tickRef.current);
     if (!isPlaying) return;
     tickRef.current = setInterval(() => {
-      if (!playerRef.current) return;
       try {
-        const elapsed = playerRef.current.getCurrentTime?.() ?? 0;
-        const dur = playerRef.current.getDuration?.() ?? track?.durationSec ?? 0;
-        if (dur > 0) onTimeUpdateRef.current?.(elapsed, dur);
-      } catch {}
+        let elapsed = 0;
+        let dur = track?.durationSec ?? 0;
+        
+        // Get time from YouTube player
+        if (track?.provider === "youtube" && playerRef.current) {
+          elapsed = playerRef.current.getCurrentTime?.() ?? 0;
+          dur = playerRef.current.getDuration?.() ?? track?.durationSec ?? 0;
+        }
+        
+        // Get time from audio element
+        if (track?.provider === "voice" && audioRef.current) {
+          elapsed = audioRef.current.currentTime;
+          dur = (audioRef.current.duration || track?.durationSec) ?? 0;
+        }
+        
+        if (dur > 0) {
+          onTimeUpdateRef.current?.(elapsed, dur);
+          // Update background playback state for lock screen / background mode
+          if (track) {
+            updateBackgroundPlaybackState(track.providerTrackId, elapsed, dur, true);
+            updateMediaSession(
+              track.title,
+              track.artist,
+              track.thumbnailUrl,
+              dur,
+              elapsed
+            );
+          }
+        }
+      } catch (e) {
+        console.error("[PlayerBar] Time update error:", e);
+      }
     }, 500);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [isPlaying, track?.id]);
+  }, [isPlaying, track?.id, track]);
 
   // ── Scrubber interaction ──────────────────────────────────────────────────
   function scrubAt(clientX: number, rect: DOMRect) {
@@ -721,20 +804,21 @@ export default function PlayerBar({
         </AnimatePresence>
       </div>
 
-      {/* ── YOUTUBE PLAYER ────────────────────────────────────────── */}
+      {/* ── YOUTUBE PLAYER / AUDIO PLAYER ────────────────────────────────────────── */}
       <div
         style={{
           background: "#0E0C08",
-          borderTop: showVideo ? "1px solid rgba(255,255,255,0.035)" : "none",
+          borderTop: (showVideo || track?.provider === "voice") ? "1px solid rgba(255,255,255,0.035)" : "none",
           overflow: "hidden",
-          maxHeight: showVideo ? 220 : 0,
+          maxHeight: (showVideo || track?.provider === "voice") ? 220 : 0,
           transition: "max-height 0.35s cubic-bezier(0.22,1,0.36,1)",
         }}
       >
         <div
           className="w-full max-w-xs mx-auto"
-          style={{ aspectRatio: "16/9", padding: "8px 12px" }}
+          style={{ aspectRatio: track?.provider === "voice" ? "auto" : "16/9", padding: "8px 12px" }}
         >
+          {/* YouTube player */}
           <div
             id={playerDivId}
             style={{
@@ -743,8 +827,36 @@ export default function PlayerBar({
               borderRadius: 8,
               overflow: "hidden",
               background: "#100E08",
+              display: track?.provider === "voice" ? "none" : "block",
             }}
           />
+          
+          {/* Audio player for voice recordings */}
+          {track?.provider === "voice" && (
+            <audio
+              ref={audioRef}
+              style={{
+                width: "100%",
+                height: "auto",
+                display: "block",
+              }}
+              controls
+              controlsList="nodownload"
+              onEnded={() => {
+                console.log("[PlayerBar] Voice recording ended");
+                onPause();
+                onSeek(0);
+              }}
+              onLoadedMetadata={() => {
+                console.log("[PlayerBar] Voice recording loaded:", {
+                  duration: audioRef.current?.duration,
+                });
+              }}
+              onError={(e) => {
+                console.error("[PlayerBar] Audio error:", e);
+              }}
+            />
+          )}
         </div>
       </div>
 

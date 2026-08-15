@@ -1,15 +1,45 @@
 import { Metadata } from "next";
-import { getPublicTapes } from "@/app/actions/tape";
+import { searchPublicTapes, getAvailableStyles, getAvailableRelationships, getPublicTapeCount } from "@/app/lib/shelf-discovery";
 import CassetteShelf from "@/app/components/CassetteShelf";
 import { BackgroundImage } from "@/app/components/BackgroundImage";
+import ShelfClientPage from "./ShelfClientPage";
 
 export const metadata: Metadata = {
   title: "Public Cassettes | CASSETTE",
   description: "Discover public cassettes made by creators. Find mood-based playlists and mixtapes shared by the community.",
+  openGraph: {
+    title: "Public Cassettes | CASSETTE",
+    description: "Discover tapes made by creators around the world. Digital mixtapes filled with emotion.",
+    type: "website",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
-export default async function ShelfPage() {
-  const publicTapes = await getPublicTapes(50);
+export default async function ShelfPage({
+  searchParams,
+}: {
+  searchParams: { search?: string; style?: string; relationship?: string; sort?: string };
+}) {
+  const search = searchParams.search || "";
+  const style = searchParams.style || "";
+  const relationship = searchParams.relationship || "";
+  const sortBy = (searchParams.sort || "recent") as "recent" | "popular" | "trending";
+
+  const [publicTapes, availableStyles, availableRelationships, tapeCount] = await Promise.all([
+    searchPublicTapes({
+      search,
+      style: style || undefined,
+      relationship: relationship || undefined,
+      sortBy,
+      limit: 50,
+    }),
+    getAvailableStyles(),
+    getAvailableRelationships(),
+    getPublicTapeCount(),
+  ]);
 
   return (
     <div style={{ background: "#FBFAF7", minHeight: "100vh" }} className="relative overflow-hidden">
@@ -30,7 +60,7 @@ export default async function ShelfPage() {
 
       {/* Content wrapper */}
       <div className="relative z-10">
-      
+        
       {/* Header */}
       <div
         className="sticky top-0 z-30 flex items-center justify-between px-5 py-4"
@@ -64,40 +94,32 @@ export default async function ShelfPage() {
             Browse mood-based playlists and mixtapes created by our community.
             Find the perfect vibe for any moment.
           </p>
-          <a href="/create"
-            className="inline-block px-6 py-3 rounded-full font-semibold text-sm transition-all hover:opacity-85"
-            style={{
-              background: "#D4882A",
-              color: "#FBFAF7",
-              textDecoration: "none",
-            }}>
-            Create Your Own →
-          </a>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <a href="/create"
+              className="inline-block px-6 py-3 rounded-full font-semibold text-sm transition-all hover:opacity-85"
+              style={{
+                background: "#D4882A",
+                color: "#FBFAF7",
+                textDecoration: "none",
+              }}>
+              Create Your Own →
+            </a>
+            <span className="text-xs px-4 py-3 rounded-full" style={{ color: "#8E8E93", background: "#F3EFE7" }}>
+              {tapeCount} tapes discovered
+            </span>
+          </div>
         </div>
 
-        {/* Shelf */}
-        {publicTapes && publicTapes.length > 0 ? (
-          <CassetteShelf tapes={publicTapes as any} />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-lg mb-4" style={{ color: "#8E8E93", fontStyle: "italic" }}>
-              No public cassettes yet.
-            </p>
-            <p className="text-sm mb-6" style={{ color: "#AAAAAA" }}>
-              Be the first to create one and share your vibe with the community.
-            </p>
-            <a href="/create"
-              className="px-5 py-2.5 rounded-full text-sm font-semibold transition-all hover:opacity-85"
-              style={{
-                background: "#F3EFE7",
-                color: "#D4882A",
-                textDecoration: "none",
-                border: "1px solid #E8E5DF",
-              }}>
-              + Start Creating
-            </a>
-          </div>
-        )}
+        {/* Client-side search/filter */}
+        <ShelfClientPage
+          initialTapes={publicTapes}
+          availableStyles={availableStyles}
+          availableRelationships={availableRelationships}
+          initialSearch={search}
+          initialStyle={style}
+          initialRelationship={relationship}
+          initialSort={sortBy}
+        />
       </div>
       {/* Close content wrapper */}
       </div>

@@ -24,7 +24,7 @@ function hexToRgb(hex: string): string {
  * On release, applies inertia (exponential decay) then spring snap to 0.
  * Simulates mass + friction on a real spinning wheel.
  */
-export default function HeroScene({ className = "", style = "classic" }: { className?: string; style?: "classic" | "y2k" | "love" | "road_trip" }) {
+export default function HeroScene({ className = "", style = "classic" }: { className?: string; style?: "classic" | "y2k" | "love" | "road_trip" | "school" | "summer" }) {
   // Reel rotation
   const rotation = useMotionValue(0);
   const springRotation = useSpring(rotation, { stiffness: 60, damping: 18, mass: 1.2 });
@@ -58,6 +58,20 @@ export default function HeroScene({ className = "", style = "classic" }: { class
       secondaryColor: "#8BB8D4",
       horizonColor: "#5B7FA6",
       bokehColors: ["#5B7FA6", "#8BB8D4", "#A8D0E8", "#3D6B8B"],
+    },
+    school: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #1a1f2a 0%, #0f1520 40%, #050809 100%)",
+      accentColor: "#4A5F8F",
+      secondaryColor: "#7A8FB0",
+      horizonColor: "#4A5F8F",
+      bokehColors: ["#4A5F8F", "#7A8FB0", "#8BA0D0", "#5B6FA8"],
+    },
+    summer: {
+      bgGradient: "radial-gradient(ellipse at 30% 0%, #3a2a0f 0%, #2a1a0a 40%, #0f0905 100%)",
+      accentColor: "#F5A623",
+      secondaryColor: "#FFD966",
+      horizonColor: "#F5A623",
+      bokehColors: ["#F5A623", "#FFD966", "#FFB84D", "#FF9800"],
     },
   };
 

@@ -7,7 +7,7 @@ export type CaseCoverState = "closed" | "opening" | "open" | "closing";
 
 interface CassetteCaseProps {
   state: CaseCoverState;
-  style?: "classic" | "y2k" | "love" | "road_trip";
+  style?: "classic" | "y2k" | "love" | "road_trip" | "school" | "summer";
   title?: string;
   recipientName?: string;
   senderName?: string;
@@ -21,6 +21,8 @@ const STYLE_COLORS = {
   y2k:       { shell: "#2D0A4E", spine: "#E040FB", text: "#F5E6FF", accent: "#00E5FF" },
   love:      { shell: "#3D0A14", spine: "#D45A6A", text: "#FFE8EC", accent: "#F7A8B0" },
   road_trip: { shell: "#0A1A2E", spine: "#5B7FA6", text: "#E8F0F8", accent: "#D4882A" },
+  school:    { shell: "#1A2535", spine: "#4A5F8F", text: "#E0E8F0", accent: "#7A8FB0" },
+  summer:    { shell: "#3A2A1A", spine: "#F5A623", text: "#FFFAF0", accent: "#FFD966" },
 };
 
 export default function CassetteCase({
