@@ -47,7 +47,6 @@ export async function searchPublicTapes(
     status: "published",
     visibility: "public",
     deletedAt: null,
-    flaggedForReview: false, // Exclude reported/flagged tapes
   };
 
   // Search filter — full-text search on title, senderName, recipientName
@@ -135,7 +134,6 @@ export async function getFeaturedTapes(limit = 6): Promise<DiscoveryTape[]> {
         status: "published",
         visibility: "public",
         deletedAt: null,
-        flaggedForReview: false, // Exclude reported/flagged tapes
       },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       take: limit,
@@ -187,7 +185,6 @@ export async function getAvailableStyles(): Promise<string[]> {
         status: "published",
         visibility: "public",
         deletedAt: null,
-        flaggedForReview: false,
       },
       select: { style: true },
       distinct: ["style"],
@@ -209,7 +206,6 @@ export async function getAvailableRelationships(): Promise<string[]> {
         status: "published",
         visibility: "public",
         deletedAt: null,
-        flaggedForReview: false,
       },
       select: { relationship: true },
       distinct: ["relationship"],
@@ -233,7 +229,6 @@ export async function getPublicTapeCount(): Promise<number> {
         status: "published",
         visibility: "public",
         deletedAt: null,
-        flaggedForReview: false,
       },
     });
   } catch (error) {

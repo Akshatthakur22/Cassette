@@ -21,6 +21,7 @@ export interface TrackInput {
   title: string;
   artist?: string;
   thumbnailUrl?: string;
+  provider?: string;
   providerTrackId: string;
   personalNote?: string;
   durationSec?: number;

@@ -111,7 +111,12 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
 
   return (
     <div className="rounded-lg border-2 border-amber-200 bg-amber-50 p-4">
-      <h3 className="font-semibold mb-3">🎤 Add a Voice Message</h3>
+      <h3
+    className="mb-3 font-semibold"
+    style={{ color: "#000000" }}
+  >
+    🎤 Add a Voice Message
+  </h3>
 
       {recordingUrl ? (
         // Playback mode
@@ -130,7 +135,12 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-            <span className="font-mono text-lg">{formatDuration(duration)}</span>
+            <span
+  className="font-mono text-lg"
+  style={{ color: "#000000" }}
+>
+  {formatDuration(duration)}
+</span>
             <span className="text-xs text-gray-600">
               (Max {formatDuration(VOICE_CONFIG.maxDuration)})
             </span>

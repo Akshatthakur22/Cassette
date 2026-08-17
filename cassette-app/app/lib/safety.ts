@@ -91,7 +91,7 @@ export function checkContentForSpam(
 
 /**
  * Check for duplicate/similar tapes from same creator
- * Prevents spam by same user creating identical tapes repeatedly
+ * Only blocks exact duplicates within 15 minutes (prevents accidental double-publishes)
  */
 export async function checkForDuplicates(
   senderName: string,
@@ -103,29 +103,29 @@ export async function checkForDuplicates(
   }
 
   try {
-    // Find tapes with same sender and similar title created in last 24 hours
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Only check for exact match within last 15 minutes (not 24 hours)
+    // This prevents accidental double-publishes but allows intentional similar tapes
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
 
-    const similarTapes = await prisma.tape.findMany({
+    const exactMatches = await prisma.tape.findMany({
       where: {
         senderName,
-        createdAt: { gte: oneDayAgo },
+        createdAt: { gte: fifteenMinutesAgo },
         title: {
-          contains: title.substring(0, Math.min(10, title.length)),
+          equals: title,
           mode: "insensitive",
         },
+        status: "published", // Only check published tapes
       },
       select: { id: true, title: true },
     });
 
-    // If exact match exists, likely duplicate
-    const exactMatch = similarTapes.some(
-      (t) => t.title?.toLowerCase() === title.toLowerCase()
-    );
+    // Only block if exact match exists and was published recently
+    const isDuplicate = exactMatches.length > 0;
 
     return {
-      isDuplicate: exactMatch || similarTapes.length > 3,
-      similarTapeCount: similarTapes.length,
+      isDuplicate,
+      similarTapeCount: exactMatches.length,
     };
   } catch (error) {
     console.error("Error checking for duplicates:", error);
@@ -135,6 +135,7 @@ export async function checkForDuplicates(
 
 /**
  * Record a content report
+ * NOTE: contentReport table removed from schema - functionality disabled for now
  */
 export async function recordContentReport(
   tapeId: string,
@@ -142,110 +143,29 @@ export async function recordContentReport(
   reason: "inappropriate" | "spam" | "copyright" | "harassment" | "other",
   details?: string
 ): Promise<{ success: boolean; reportId?: string }> {
-  try {
-    const report = await prisma.contentReport.create({
-      data: {
-        tapeId,
-        reporterSessionId,
-        reason,
-        details,
-        status: "pending",
-      },
-    });
-
-    // If this is the 3rd report on a tape, auto-flag for review
-    const reportCount = await prisma.contentReport.count({
-      where: { tapeId, status: "pending" },
-    });
-
-    if (reportCount >= 3) {
-      await prisma.tape.update({
-        where: { id: tapeId },
-        data: { flaggedForReview: true },
-      });
-    }
-
-    return { success: true, reportId: report.id };
-  } catch (error) {
-    console.error("Error recording report:", error);
-    return { success: false };
-  }
+  // Functionality disabled - contentReport model not in current schema
+  return { success: false };
 }
 
 /**
  * Get pending content reports (for moderation queue)
+ * NOTE: contentReport table removed from schema - functionality disabled for now
  */
 export async function getPendingReports(limit = 50, offset = 0) {
-  try {
-    const reports = await prisma.contentReport.findMany({
-      where: { status: "pending" },
-      orderBy: { createdAt: "desc" },
-      skip: offset,
-      take: limit,
-      select: {
-        id: true,
-        tapeId: true,
-        reason: true,
-        details: true,
-        createdAt: true,
-        tape: {
-          select: {
-            publicId: true,
-            title: true,
-            senderName: true,
-            recipientName: true,
-          },
-        },
-      },
-    });
-
-    return reports;
-  } catch (error) {
-    console.error("Error fetching reports:", error);
-    return [];
-  }
+  // Functionality disabled - contentReport model not in current schema
+  return [];
 }
 
 /**
  * Review a report - mark as resolved
+ * NOTE: contentReport table removed from schema - functionality disabled for now
  */
 export async function resolveReport(
   reportId: string,
   action: "keep" | "delete" | "flag"
 ): Promise<{ success: boolean }> {
-  try {
-    const report = await prisma.contentReport.findUnique({
-      where: { id: reportId },
-      select: { tapeId: true },
-    });
-
-    if (!report) {
-      return { success: false };
-    }
-
-    // Update report status
-    await prisma.contentReport.update({
-      where: { id: reportId },
-      data: { status: action === "delete" ? "removed" : "reviewed" },
-    });
-
-    // If deleting, soft-delete the tape
-    if (action === "delete") {
-      await prisma.tape.update({
-        where: { id: report.tapeId },
-        data: {
-          status: "deleted",
-          deletedAt: new Date(),
-          flaggedForReview: false,
-        },
-      });
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("Error resolving report:", error);
-    return { success: false };
-  }
+  // Functionality disabled - contentReport model not in current schema
+  return { success: false };
 }
 
 /**

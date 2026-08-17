@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { nanoid } from "nanoid";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
 
 /**
  * POST /api/upload-voice-recording
@@ -71,6 +73,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Convert file to buffer and save to disk
+    const buffer = await audioFile.arrayBuffer();
+    const trackId = nanoid();
+    
+    const voiceDir = join(process.cwd(), "public", "voice-recordings");
+    await mkdir(voiceDir, { recursive: true });
+    
+    const filename = `${trackId}.webm`;
+    const filepath = join(voiceDir, filename);
+    const fileUrl = `/voice-recordings/${filename}`;
+    
+    await writeFile(filepath, Buffer.from(buffer));
+
     // Get the highest position for side A
     const lastTrack = await prisma.tapeTrack.findFirst({
       where: { tapeId: tapeId, side: "A" },
@@ -81,8 +96,6 @@ export async function POST(request: NextRequest) {
     const nextPosition = (lastTrack?.position ?? -1) + 1;
 
     // Create track entry in database
-    const trackId = nanoid();
-    
     const track = await prisma.tapeTrack.create({
       data: {
         id: trackId,
@@ -102,6 +115,7 @@ export async function POST(request: NextRequest) {
       trackId: track.id,
       title: track.title,
       duration: track.durationSec,
+      url: fileUrl,
     });
   } catch (error) {
     console.error("Voice recording upload error:", error);

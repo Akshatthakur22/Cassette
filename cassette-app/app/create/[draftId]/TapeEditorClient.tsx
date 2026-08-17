@@ -953,24 +953,50 @@ function AddTrackForm({ onSubmit, newTrack, setNewTrack, trackError, setTrackErr
         <button
           type="button"
           onClick={() => { setUseAdvancedSearch(false); setUseUrlValidator(false); setManualEntry(false); }}
-          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${!useAdvancedSearch && !useUrlValidator && !manualEntry ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
-          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all font-medium ${!useAdvancedSearch && !useUrlValidator && !manualEntry ? 'text-white' : 'text-gray-600'}`}
+          style={{ 
+            border: "1px solid", 
+            minHeight: "44px", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            backgroundColor: !useAdvancedSearch && !useUrlValidator && !manualEntry ? '#F5A623' : '#F0F0F0',
+            borderColor: !useAdvancedSearch && !useUrlValidator && !manualEntry ? '#F5A623' : '#D8D8D8'
+          }}
         >
           Search
         </button>
         <button
           type="button"
           onClick={() => { setUseUrlValidator(true); setUseAdvancedSearch(false); setManualEntry(false); }}
-          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${useUrlValidator ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
-          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all font-medium`}
+          style={{ 
+            border: "1px solid", 
+            minHeight: "44px", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            backgroundColor: useUrlValidator ? '#F5A623' : '#F0F0F0',
+            borderColor: useUrlValidator ? '#F5A623' : '#D8D8D8',
+            color: useUrlValidator ? '#FFFFFF' : '#333333'
+          }}
         >
           URL
         </button>
         <button
           type="button"
           onClick={() => { setUseAdvancedSearch(true); setUseUrlValidator(false); setManualEntry(false); }}
-          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all ${useAdvancedSearch ? 'bg-amber-100 border-amber-300' : 'bg-gray-100 border-gray-300'}`}
-          style={{ border: "1px solid", minHeight: "44px", display: "flex", alignItems: "center", justifyContent: "center" }}
+          className={`flex-1 px-3 py-2 text-xs rounded-lg transition-all font-medium`}
+          style={{ 
+            border: "1px solid", 
+            minHeight: "44px", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            backgroundColor: useAdvancedSearch ? '#F5A623' : '#F0F0F0',
+            borderColor: useAdvancedSearch ? '#F5A623' : '#D8D8D8',
+            color: useAdvancedSearch ? '#FFFFFF' : '#333333'
+          }}
         >
           Advanced
         </button>

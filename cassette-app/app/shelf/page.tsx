@@ -21,12 +21,13 @@ export const metadata: Metadata = {
 export default async function ShelfPage({
   searchParams,
 }: {
-  searchParams: { search?: string; style?: string; relationship?: string; sort?: string };
+  searchParams: Promise<{ search?: string; style?: string; relationship?: string; sort?: string }>;
 }) {
-  const search = searchParams.search || "";
-  const style = searchParams.style || "";
-  const relationship = searchParams.relationship || "";
-  const sortBy = (searchParams.sort || "recent") as "recent" | "popular" | "trending";
+  const params = await searchParams;
+  const search = params.search || "";
+  const style = params.style || "";
+  const relationship = params.relationship || "";
+  const sortBy = (params.sort || "recent") as "recent" | "popular" | "trending";
 
   const [publicTapes, availableStyles, availableRelationships, tapeCount] = await Promise.all([
     searchPublicTapes({
@@ -41,11 +42,14 @@ export default async function ShelfPage({
     getPublicTapeCount(),
   ]);
 
+  // Use a stable hash for server-rendered page to avoid hydration mismatches
+  const stableImageNumber = (search + style + relationship).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 13 + 1;
+
   return (
     <div style={{ background: "#FBFAF7", minHeight: "100vh" }} className="relative overflow-hidden">
       {/* Background decorative image */}
       <BackgroundImage
-        imageNumber={Math.floor(Math.random() * 13) + 1}
+        imageNumber={stableImageNumber}
         opacity={0.2}
         position="top-right"
       />

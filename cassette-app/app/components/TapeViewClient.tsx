@@ -147,6 +147,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     title: t.title,
     artist: t.artist ?? "Unknown",
     thumbnailUrl: t.thumbnailUrl ?? "",
+    provider: (t.provider ?? "youtube") as "youtube" | "voice",
     providerTrackId: extractVideoId(t.providerTrackId),
     personalNote: t.personalNote ?? undefined,
     durationSec: t.durationSec ?? 240,

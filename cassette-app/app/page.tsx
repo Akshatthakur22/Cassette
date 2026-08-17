@@ -18,10 +18,10 @@ const DEMO_TAPES = [
 export const revalidate = 60; // revalidate shelf every minute
 
 export default async function LandingPage() {
-  // Fetch real public tapes — fall back to demo set if none exist
+  // Fetch real public tapes — require at least 1 to show real shelf
   let shelfTapes = await getPublicTapes(18).catch(() => []);
 
-  const tapesForShelf = shelfTapes.length >= 3
+  const tapesForShelf = shelfTapes.length >= 1
     ? shelfTapes.map((t, i) => ({
         publicId: t.publicId,
         title: t.title ?? "Untitled",

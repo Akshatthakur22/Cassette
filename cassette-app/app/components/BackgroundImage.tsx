@@ -40,7 +40,8 @@ export function BackgroundImage({
         alt={`Background decoration ${imageNumber}`}
         fill
         priority={imageNumber <= 3}
-        quality={90}
+        quality={85}
+        sizes="100vw"
         className={`
           ${positionMap[position]}
           ${objectFit === "cover" ? "object-cover" : objectFit === "contain" ? "object-contain" : "object-fill"}
@@ -90,7 +91,8 @@ export function InlineBackgroundImage({
         src={`/images/optimized/${imageNumber}.png`}
         alt={`Background decoration ${imageNumber}`}
         fill
-        quality={80}
+        quality={85}
+        sizes="(max-width: 640px) 640px, (max-width: 1024px) 1024px, 100vw"
         className={`
           ${positionMap[position]}
           transition-opacity duration-700

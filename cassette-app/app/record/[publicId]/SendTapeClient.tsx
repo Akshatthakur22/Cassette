@@ -27,6 +27,12 @@ export default function SendTapeClient({
   const [caseState, setCaseState] = useState<"open" | "closing" | "closed">("open");
   const [sent, setSent] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [backgroundNumber, setBackgroundNumber] = useState(1);
+
+  useEffect(() => {
+    // Set background number only on client to avoid hydration mismatch
+    setBackgroundNumber(Math.floor(Math.random() * 13) + 1);
+  }, []);
 
   const domain = process.env.NEXT_PUBLIC_DOMAIN ||
     (typeof window !== "undefined" ? window.location.origin : "");
@@ -85,7 +91,7 @@ export default function SendTapeClient({
       
       {/* Background decorative image */}
       <BackgroundImage
-        imageNumber={Math.floor(Math.random() * 13) + 1}
+        imageNumber={backgroundNumber}
         opacity={0.24}
         position="top-left"
       />

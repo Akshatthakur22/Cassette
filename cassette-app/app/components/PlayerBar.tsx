@@ -361,17 +361,41 @@ export default function PlayerBar({
       playerRef.current = new window.YT.Player(playerDivId, {
         videoId,
         width: "100%", height: "100%",
-        playerVars: { autoplay: 0, controls: 1, modestbranding: 1, rel: 0, playsinline: 1, fs: 0, iv_load_policy: 3 },
+        // Keep autoplay disabled to respect browser policy
+        // Audio will play when user clicks the play button
+        playerVars: { 
+          autoplay: 0, 
+          controls: 1, 
+          modestbranding: 1, 
+          rel: 0, 
+          playsinline: 1, 
+          fs: 0, 
+          iv_load_policy: 3,
+        },
         events: {
           onReady(event: any) {
             initPendingRef.current = false;
-            if (isPlayingRef.current) event.target.playVideo();
+            // Set volume to max and unmute when player is ready
+            try {
+              event.target.setVolume(100);
+              event.target.unMute();
+              console.log("[PlayerBar] Player ready - volume set to 100, unmuted");
+            } catch (e) {
+              console.warn("[PlayerBar] Could not set volume/unmute on ready:", e);
+            }
+            // Don't auto-play here - wait for user interaction via play button
+            if (isPlayingRef.current) {
+              event.target.playVideo();
+            }
           },
           onStateChange(event: any) {
             if (event.data === 1) trackClientEvent(CLIENT_EVENTS.TAPE_PLAYED, { videoId }).catch(() => {});
             if (event.data === 0) onNextRef.current();
           },
-          onError() { onNextRef.current(); },
+          onError(event: any) { 
+            console.error("[PlayerBar] YouTube player error:", event.data);
+            onNextRef.current(); 
+          },
         },
       });
     } catch { initPendingRef.current = false; }
@@ -404,9 +428,20 @@ export default function PlayerBar({
     // Handle YouTube playback
     if (track?.provider === "youtube" && playerRef.current) {
       try { 
-        if (isPlaying) playerRef.current.playVideo(); 
-        else playerRef.current.pauseVideo(); 
-      } catch {}
+        if (isPlaying) {
+          // Ensure unmute before playing
+          const beforeMute = playerRef.current.isMuted?.();
+          playerRef.current.unMute?.();
+          const afterMute = playerRef.current.isMuted?.();
+          playerRef.current.setVolume?.(100);
+          console.log("[PlayerBar] Playing with unmute:", { beforeMute, afterMute });
+          playerRef.current.playVideo();
+        } else {
+          playerRef.current.pauseVideo(); 
+        }
+      } catch (e) {
+        console.error("[PlayerBar] YouTube playback error:", e);
+      }
     }
     
     // Handle voice recording playback

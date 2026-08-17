@@ -8,8 +8,8 @@
 
 @theme inline {
   /* ── Fonts ── */
-  --font-display: var(--font-playfair);
-  --font-ui:      var(--font-inter);
+  --font-display: Georgia, serif;
+  --font-ui:      system-ui, sans-serif;
 
   /* ── Core UI — Aged paper warm surface ── */
   --color-paper:        #FAF6EF;

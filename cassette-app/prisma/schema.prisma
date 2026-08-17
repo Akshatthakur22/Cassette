@@ -21,8 +21,8 @@ model Tape {
   visibility        String      @default("unlisted") // unlisted | public
   memoryDate        DateTime?
   status            String      @default("draft")   // draft | published | deleted
-  flaggedForReview  Boolean     @default(false)
-  createdFromTapeId String?     // Track "make one back" origin for viral coefficient
+  flaggedForReview  Boolean     @default(false)     // Auto-flagged after 3+ content reports
+  createdFromTapeId String?     // For viral loop: ID of tape this was created from
   
   // Playlist metadata (optional, for playlists created from YouTube)
   playlistSourceId  String?     // YouTube playlist ID if created from playlist

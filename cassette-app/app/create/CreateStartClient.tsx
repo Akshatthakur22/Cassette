@@ -35,18 +35,21 @@ export default function CreateStartClient() {
   const fromTapeId = searchParams.get("from") || "";
   const initialStyle = searchParams.get("style") || "cream";
 
-  useEffect(() => {
-    if (fromTapeId) {
-      trackClientEvent(CLIENT_EVENTS.RECIPIENT_CREATED_TAPE, { fromTapeId, source: "make_one_back" });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const [step, setStep] = useState<"intention" | "details">("intention");
   const [relationship, setRelationship] = useState("other");
   const [style, setStyle] = useState(initialStyle);
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
+  const [backgroundNumber, setBackgroundNumber] = useState(1);
+
+  useEffect(() => {
+    if (fromTapeId) {
+      trackClientEvent(CLIENT_EVENTS.RECIPIENT_CREATED_TAPE, { fromTapeId, source: "make_one_back" });
+    }
+    // Set background number only on client to avoid hydration mismatch
+    setBackgroundNumber(Math.floor(Math.random() * 13) + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -75,7 +78,7 @@ export default function CreateStartClient() {
       
       {/* Background decorative image */}
       <BackgroundImage
-        imageNumber={Math.floor(Math.random() * 13) + 1}
+        imageNumber={backgroundNumber}
         opacity={0.22}
         position="bottom-left"
       />
