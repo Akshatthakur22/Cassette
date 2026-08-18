@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
 import { nanoid } from "nanoid";
-import { writeFile, mkdir } from "fs/promises";
+import { unlink, writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 
 export async function POST(request: NextRequest) {
@@ -46,9 +46,16 @@ export async function POST(request: NextRequest) {
     const buffer = await file.arrayBuffer();
     console.log("[voice-messages/upload] Buffer created:", buffer.byteLength);
 
-    // Get audio duration
-    const duration = await estimateAudioDuration(buffer);
-    console.log("[voice-messages/upload] Duration estimated:", duration);
+    // Get audio duration - prefer exact duration sent by client
+    const clientDurationStr = formData.get("duration") as string | null;
+    let duration: number;
+    if (clientDurationStr && !isNaN(Number(clientDurationStr)) && Number(clientDurationStr) > 0) {
+      duration = Math.min(300, Math.max(1, Math.round(Number(clientDurationStr))));
+      console.log("[voice-messages/upload] Using client duration:", duration);
+    } else {
+      duration = await estimateAudioDuration(buffer);
+      console.log("[voice-messages/upload] Using fallback estimated duration:", duration);
+    }
 
     // Get tape to find next track position
     const tape = await prisma.tape.findUnique({
@@ -86,27 +93,64 @@ export async function POST(request: NextRequest) {
     const filename = `${trackId}.webm`;
     const filepath = join(voiceDir, filename);
     const fileUrl = `/voice-recordings/${filename}`;
-    
+
+    const existingVoiceTrack = await prisma.tapeTrack.findFirst({
+      where: { tapeId, provider: "voice" },
+      select: {
+        id: true,
+        providerTrackId: true,
+        side: true,
+        position: true,
+      },
+    });
+
+    if (existingVoiceTrack?.providerTrackId && existingVoiceTrack.providerTrackId !== trackId) {
+      const previousPath = join(voiceDir, `${existingVoiceTrack.providerTrackId}.webm`);
+      try {
+        await unlink(previousPath);
+      } catch {
+        // Ignore cleanup failures; a missing file is fine.
+      }
+    }
+
     await writeFile(filepath, Buffer.from(buffer));
     console.log("[voice-messages/upload] Audio file saved:", {
       path: filepath,
       url: fileUrl,
     });
 
-    // Create track record with URL to the saved file
-    const track = await prisma.tapeTrack.create({
+    const voiceTrackData = {
+      tapeId,
+      side: existingVoiceTrack?.side ?? "A",
+      position: existingVoiceTrack?.position ?? nextPosition,
+      title: `Voice Recording - ${new Date().toLocaleTimeString()}`,
+      artist: "You",
+      provider: "voice",
+      providerTrackId: trackId,
+      durationSec: duration,
+      thumbnailUrl: null,
+      personalNote: null,
+    };
+
+    const track = existingVoiceTrack
+      ? await prisma.tapeTrack.update({
+          where: { id: existingVoiceTrack.id },
+          data: voiceTrackData,
+        })
+      : await prisma.tapeTrack.create({
+          data: {
+            id: trackId,
+            ...voiceTrackData,
+          },
+        });
+
+    await prisma.tape.update({
+      where: { id: tapeId },
       data: {
-        id: trackId,
-        tapeId: tapeId,
-        side: "A",
-        position: nextPosition,
-        title: `Voice Recording - ${new Date().toLocaleTimeString()}`,
-        artist: "You",
-        provider: "voice",
-        providerTrackId: trackId,
-        durationSec: duration,
-        thumbnailUrl: null,
-        personalNote: null,
+        voiceMessageUrl: fileUrl,
+        voiceMessageSize: file.size,
+        voiceMessageDuration: duration,
+        voiceMessageMimeType: file.type || "audio/webm",
       },
     });
 
@@ -154,7 +198,7 @@ async function estimateAudioDuration(buffer: ArrayBuffer): Promise<number> {
           if (estimatedDuration > 0 && estimatedDuration < 3600) {
             return estimatedDuration;
           }
-        } catch (e) {
+        } catch {
           // Continue searching
         }
       }
@@ -177,4 +221,3 @@ async function estimateAudioDuration(buffer: ArrayBuffer): Promise<number> {
     return 180;
   }
 }
-

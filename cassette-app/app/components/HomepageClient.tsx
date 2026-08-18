@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import CassetteShelf, { type ShelfTape } from "./CassetteShelf";
 import { PosterImage } from "./PosterImage";
+import { DoodleBorder, DoodleScatter } from "./Doodle";
 
 interface HomepageClientProps {
   tapes: ShelfTape[];
@@ -95,6 +96,10 @@ function TopNav() {
 function HeroSection() {
   return (
     <section className="relative w-full py-4 sm:py-8 md:py-12 lg:py-16 overflow-visible">
+      <div className="absolute inset-0 hidden lg:block opacity-35">
+        <DoodleScatter count={7} minSize={10} maxSize={18} />
+      </div>
+
       {/* Scattered poster images for nostalgic aesthetic — desktop only */}
       <div className="absolute -top-16 -left-16 z-0 opacity-60 hidden sm:block">
         <PosterImage imageNumber={1} width={70} height={100} rotation={-15} />
@@ -200,32 +205,15 @@ function HeroSection() {
             fontFamily: "var(--font-inter, Inter, sans-serif)",
             fontStyle: "italic",
           }}
-        >
-          No account. No algorithm. Just your voice.
-        </motion.p>
+          >
+            No account. No algorithm. Just your voice.
+          </motion.p>
+
+        <div className="mt-6 flex justify-center">
+          <DoodleBorder side="bottom" className="hidden sm:flex" height={18} />
+        </div>
       </div>
     </section>
-  );
-}
-
-/* ─── Section divider ─────────────────────────────────────────────────────── */
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-4 mb-8">
-      <div className="flex-1 h-px" style={{ background: "var(--color-hairline)" }} />
-      <p
-        className="tracking-widest uppercase"
-        style={{
-          fontSize: "10px",
-          fontFamily: "var(--font-inter, Inter, sans-serif)",
-          color: "#8E8E93",
-          letterSpacing: "0.22em",
-        }}
-      >
-        {children}
-      </p>
-      <div className="flex-1 h-px" style={{ background: "var(--color-hairline)" }} />
-    </div>
   );
 }
 
@@ -274,7 +262,7 @@ function DiscoverShareSection() {
             }}
           >
             Create cassettes for the world. Make them from your favorite YouTube playlists or curate your own. 
-            Set them public and they'll appear on our shared shelf — a place for mood-based music discovery.
+            Set them public and they&apos;ll appear on our shared shelf — a place for mood-based music discovery.
           </p>
         </motion.div>
 

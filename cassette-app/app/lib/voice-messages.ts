@@ -78,18 +78,23 @@ export function stopVoiceRecording(mediaRecorder: MediaRecorder): Promise<Blob> 
  */
 export async function uploadVoiceMessage(
   blob: Blob,
-  tapeId: string
+  tapeId: string,
+  durationSec?: number
 ): Promise<{ url: string; size: number; duration: number; trackId: string } | null> {
   try {
     console.log("[uploadVoiceMessage] Starting upload:", {
       blobSize: blob.size,
       blobType: blob.type,
       tapeId,
+      durationSec,
     });
 
     const formData = new FormData();
     formData.append("file", blob);
     formData.append("tapeId", tapeId);
+    if (durationSec && durationSec > 0) {
+      formData.append("duration", durationSec.toString());
+    }
 
     const response = await fetch("/api/voice-messages/upload", {
       method: "POST",

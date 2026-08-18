@@ -46,7 +46,7 @@ export default async function ShelfPage({
   const stableImageNumber = (search + style + relationship).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 13 + 1;
 
   return (
-    <div style={{ background: "#FBFAF7", minHeight: "100vh" }} className="relative overflow-hidden">
+    <div style={{ background: "#FBFAF7", minHeight: "100vh" }} className="relative overflow-x-hidden pb-20">
       {/* Background decorative image */}
       <BackgroundImage
         imageNumber={stableImageNumber}

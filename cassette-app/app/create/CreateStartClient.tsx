@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import { createDraft } from "@/app/actions/tape";
 import { BackgroundImage } from "@/app/components/BackgroundImage";
+import { DoodleBorder, DoodleScatter } from "@/app/components/Doodle";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 
 const RELATIONSHIPS = [
@@ -38,6 +39,7 @@ export default function CreateStartClient() {
   const [step, setStep] = useState<"intention" | "details">("intention");
   const [relationship, setRelationship] = useState("other");
   const [style, setStyle] = useState(initialStyle);
+  const [visibility, setVisibility] = useState<"unlisted" | "public">("unlisted");
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [backgroundNumber, setBackgroundNumber] = useState(1);
@@ -74,7 +76,10 @@ export default function CreateStartClient() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden" style={{ background: "#FBFAF7" }}>
+    <div className="relative min-h-screen overflow-x-hidden" style={{ background: "#FBFAF7" }}>
+      <div className="absolute inset-0 hidden lg:block opacity-20">
+        <DoodleScatter count={6} minSize={10} maxSize={16} />
+      </div>
       
       {/* Background decorative image */}
       <BackgroundImage
@@ -92,7 +97,7 @@ export default function CreateStartClient() {
       />
 
       {/* Content wrapper */}
-      <div className="relative z-10">
+      <div className="relative z-10 pb-28 sm:pb-20">
       {/* Sticky nav */}
       <div
         className="sticky top-0 z-30 flex items-center justify-between px-5 py-4"
@@ -113,7 +118,7 @@ export default function CreateStartClient() {
       </div>
 
       {/* Steps */}
-      <div className="flex flex-col items-center px-5 py-10 max-w-md mx-auto">
+      <div className="flex flex-col items-center px-4 sm:px-5 pt-6 sm:pt-10 pb-16 max-w-md mx-auto">
         <AnimatePresence mode="wait">
 
           {/* Step 1 — Intention + colour */}
@@ -134,6 +139,10 @@ export default function CreateStartClient() {
                 style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#1D1D1F" }}>
                 Set the mood.
               </h1>
+
+              <div className="mb-6 flex justify-center">
+                <DoodleBorder side="bottom" className="hidden sm:flex" height={16} />
+              </div>
 
               {/* Relationship grid */}
               <div className="grid grid-cols-2 gap-3 mb-8">
@@ -260,6 +269,65 @@ export default function CreateStartClient() {
                     placeholder="Every song on here has a story…"
                     maxLength={500} rows={3} className="cassette-input resize-none" />
                 </FormField>
+
+                {/* Visibility & Discovery Setting */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs tracking-widest uppercase"
+                    style={{ color: "#8E8E93", fontFamily: "monospace" }}>
+                    Tape Visibility
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* Unlisted (Private Link) */}
+                    <label
+                      className="flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                      style={{
+                        background: visibility === "unlisted" ? "#FFFDF6" : "#FFFFFF",
+                        borderColor: visibility === "unlisted" ? "#D4882A" : "#E8E5DF",
+                        boxShadow: visibility === "unlisted" ? "0 0 0 1.5px #D4882A" : "none",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="unlisted"
+                        checked={visibility === "unlisted"}
+                        onChange={() => setVisibility("unlisted")}
+                        className="mt-0.5 accent-[#D4882A]"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-[#1D1D1F]">🔒 Unlisted (Default)</p>
+                        <p className="text-[11px] text-[#8E8E93] mt-0.5 leading-snug">
+                          Only people with your link can listen.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Public Shelf */}
+                    <label
+                      className="flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all"
+                      style={{
+                        background: visibility === "public" ? "#FFFDF6" : "#FFFFFF",
+                        borderColor: visibility === "public" ? "#D4882A" : "#E8E5DF",
+                        boxShadow: visibility === "public" ? "0 0 0 1.5px #D4882A" : "none",
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="visibility"
+                        value="public"
+                        checked={visibility === "public"}
+                        onChange={() => setVisibility("public")}
+                        className="mt-0.5 accent-[#D4882A]"
+                      />
+                      <div>
+                        <p className="text-xs font-semibold text-[#1D1D1F]">🌍 Public Shelf</p>
+                        <p className="text-[11px] text-[#8E8E93] mt-0.5 leading-snug">
+                          Feature on the community shelf for all.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
 
                 {error && (
                   <p className="text-xs text-center" style={{ color: "#C4503A" }}>{error}</p>

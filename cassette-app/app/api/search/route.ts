@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { searchYouTubeTrack } from "@/app/lib/youtube";
+import { searchYouTubeTrack } from "@/app/lib/youtube-enhanced";
 import { checkRateLimitSimple } from "@/app/lib/rate-limit";
 
 export async function GET(request: NextRequest) {

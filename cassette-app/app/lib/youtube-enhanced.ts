@@ -1,20 +1,32 @@
 /**
- * Enhanced YouTube Engine v2
- * - Search with deduplication (prevents duplicate API calls)
- * - Batch duration fetching (efficient quota usage)
- * - Smart caching (24-hour in-memory cache)
+ * Hardened YouTube Engine v3 for CASSETTE
+ * - Query normalization (strips noise tokens, labels, brackets)
+ * - Automatic query broadening fallback if 0 results
+ * - Preflight playability validation (status.embeddable check)
+ * - Minimum duration bounds (filters out Shorts <60s and sets >900s)
+ * - In-memory + PostgreSQL persistent caching (YoutubeSearchCache)
+ * - Batch duration & embeddability queries
  */
+
+import { prisma } from "@/app/lib/prisma";
 
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
 const API_KEY = process.env.YOUTUBE_API_KEY;
-const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-// In-memory search result cache
-let searchResultsCache = new Map<string, { results: any[]; timestamp: number }>();
-const CACHE_EXPIRY = 1 * 60 * 60 * 1000; // 1 hour client-side cache
+// In-memory cache for ultra-fast repeated queries in the same process (1 hour)
+const inMemorySearchCache = new Map<string, { results: any[]; timestamp: number }>();
+const IN_MEMORY_CACHE_EXPIRY = 60 * 60 * 1000;
 
-// Track in-progress searches to prevent duplicate API calls
-let searchInProgress = new Map<string, Promise<any>>();
+// Track in-progress searches to deduplicate simultaneous requests
+const searchInProgress = new Map<string, Promise<any>>();
+
+export interface YoutubeTrackResult {
+  videoId: string;
+  title: string;
+  channelTitle?: string;
+  thumbnailUrl?: string;
+  durationSec?: number;
+}
 
 export interface YoutubePlaylist {
   id: string;
@@ -35,111 +47,207 @@ export interface YoutubePlaylistItem {
 }
 
 /**
- * ─── Search YouTube with deduplication
- * Prevents multiple concurrent identical searches from wasting quota
+ * ─── Query Normalizer
+ * Cleans user queries by stripping brackets, tags, and extraneous keywords
+ */
+export function normalizeQuery(title: string, artist?: string): string {
+  let cleanedTitle = title
+    .replace(/\[(?:official|music|video|audio|lyrics|hd|4k|remastered|explicit|clean|visualizer).*?\]/gi, "")
+    .replace(/\((?:official|music|video|audio|lyrics|hd|4k|remastered|explicit|clean|visualizer).*?\)/gi, "")
+    .replace(/\b(?:ft\.|feat\.|featuring)\s+[^,\-\(\)\[\]]+/gi, "")
+    .replace(/["'“”]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  let cleanedArtist = artist
+    ? artist
+        .replace(/\b(?:ft\.|feat\.|featuring)\s+[^,\-\(\)\[\]]+/gi, "")
+        .replace(/["'“”]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+    : "";
+
+  if (cleanedArtist && !cleanedTitle.toLowerCase().includes(cleanedArtist.toLowerCase())) {
+    return `${cleanedTitle} ${cleanedArtist}`.trim();
+  }
+
+  return cleanedTitle || title.trim();
+}
+
+/**
+ * ─── Search YouTube with normalization, persistent caching, and playability validation
  */
 export async function searchYouTubeTrack(
   title: string,
   artist?: string
-): Promise<
-  Array<{
-    videoId: string;
-    title: string;
-    channelTitle?: string;
-    thumbnailUrl?: string;
-    durationSec?: number;
-  }>
-> {
+): Promise<YoutubeTrackResult[]> {
   if (!API_KEY) {
-    console.error("YOUTUBE_API_KEY not configured");
+    console.error("[YouTube API] YOUTUBE_API_KEY not configured");
     return [];
   }
 
-  // Check in-memory cache first
-  const cacheKey = `track:${title}|${artist || ""}`;
-  const cached = searchResultsCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_EXPIRY) {
-    console.debug(`Cache hit for: "${title}"`);
-    return cached.results;
+  const rawKey = `${title.trim()}|${(artist || "").trim()}`.toLowerCase();
+  const normalizedQuery = normalizeQuery(title, artist);
+
+  // 1. Check in-memory cache
+  const inMemory = inMemorySearchCache.get(rawKey);
+  if (inMemory && Date.now() - inMemory.timestamp < IN_MEMORY_CACHE_EXPIRY) {
+    return inMemory.results;
   }
 
-  // Deduplicate: if identical search is in progress, wait for it
-  const searchKey = `search:${title}|${artist || ""}`;
-  if (searchInProgress.has(searchKey)) {
-    console.debug(`Dedup: waiting for in-progress search: "${title}"`);
-    return await searchInProgress.get(searchKey)!;
-  }
-
+  // 2. Check Database Persistent Cache
   try {
-    const query = artist ? `${title} ${artist}` : title;
-    const searchPromise = performSearch(query);
-    searchInProgress.set(searchKey, searchPromise);
+    const cachedDb = await prisma.youtubeSearchCache.findUnique({
+      where: { query: rawKey },
+    });
 
-    const data = await searchPromise;
+    if (cachedDb && cachedDb.expiresAt > new Date()) {
+      const result: YoutubeTrackResult[] = [
+        {
+          videoId: cachedDb.videoId,
+          title: cachedDb.title,
+          channelTitle: cachedDb.channelTitle,
+          thumbnailUrl: cachedDb.thumbnailUrl,
+          durationSec: cachedDb.durationSec ?? undefined,
+        },
+      ];
+      inMemorySearchCache.set(rawKey, { results: result, timestamp: Date.now() });
+      return result;
+    }
+  } catch (e) {
+    // Database cache miss or transient error — continue to live API
+  }
 
-    if (!data.items || data.items.length === 0) {
-      console.debug(`No YouTube results for: "${query}"`);
+  // 3. Deduplicate in-progress searches
+  if (searchInProgress.has(rawKey)) {
+    return await searchInProgress.get(rawKey)!;
+  }
+
+  const searchPromise = (async () => {
+    try {
+      // First attempt with normalized query
+      let searchData = await performRawSearch(normalizedQuery);
+
+      // 4. Query broadening fallback if initial search yielded 0 items
+      if ((!searchData.items || searchData.items.length === 0) && title.trim() !== normalizedQuery) {
+        searchData = await performRawSearch(title.trim());
+      }
+
+      // If still empty and artist was specified, try artist + cleaned title words
+      if ((!searchData.items || searchData.items.length === 0) && artist) {
+        const words = title.split(" ").slice(0, 3).join(" ");
+        searchData = await performRawSearch(`${artist} ${words}`);
+      }
+
+      if (!searchData.items || searchData.items.length === 0) {
+        return [];
+      }
+
+      const videoIds = searchData.items
+        .filter((item: any) => item.id?.videoId)
+        .map((item: any) => item.id.videoId);
+
+      if (videoIds.length === 0) return [];
+
+      // 5. Batch fetch durations & check embeddability / playability
+      const detailsMap = await batchFetchVideoDetails(videoIds);
+
+      // 6. Filter out Shorts (<60s) and non-embeddable videos
+      const validResults: YoutubeTrackResult[] = [];
+
+      for (const item of searchData.items) {
+        const videoId = item.id?.videoId;
+        if (!videoId) continue;
+
+        const details = detailsMap[videoId];
+        // If details exist, enforce embeddability and minimum 60-second length (block Shorts)
+        if (details) {
+          if (details.embeddable === false) {
+            continue; // Skip videos that cannot be embedded
+          }
+          if (details.durationSec < 60) {
+            continue; // Skip Shorts and ultra-short clips
+          }
+          if (details.durationSec > 900) {
+            continue; // Skip overly long multi-hour mixes
+          }
+        }
+
+        validResults.push({
+          videoId,
+          title: item.snippet?.title || "Untitled",
+          channelTitle: item.snippet?.channelTitle,
+          thumbnailUrl:
+            item.snippet?.thumbnails?.medium?.url ||
+            item.snippet?.thumbnails?.default?.url,
+          durationSec: details?.durationSec,
+        });
+      }
+
+      // 7. Save to caches
+      inMemorySearchCache.set(rawKey, { results: validResults, timestamp: Date.now() });
+
+      if (validResults.length > 0) {
+        const top = validResults[0];
+        prisma.youtubeSearchCache
+          .upsert({
+            where: { query: rawKey },
+            update: {
+              videoId: top.videoId,
+              title: top.title,
+              channelTitle: top.channelTitle || "",
+              thumbnailUrl: top.thumbnailUrl || "",
+              durationSec: top.durationSec || null,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+            },
+            create: {
+              query: rawKey,
+              videoId: top.videoId,
+              title: top.title,
+              channelTitle: top.channelTitle || "",
+              thumbnailUrl: top.thumbnailUrl || "",
+              durationSec: top.durationSec || null,
+              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            },
+          })
+          .catch(() => {});
+      }
+
+      return validResults;
+    } catch (error) {
+      console.error("[searchYouTubeTrack] Error:", error);
       return [];
     }
+  })();
 
-    // Extract video IDs for batch duration lookup
-    const videoIds = data.items
-      .filter((item: any) => item.id?.videoId)
-      .map((item: any) => item.id.videoId);
+  searchInProgress.set(rawKey, searchPromise);
 
-    let durations: Record<string, number> = {};
-    if (videoIds.length > 0) {
-      durations = await batchFetchDurations(videoIds);
-    }
-
-    const results = data.items
-      .filter((item: any) => item.id?.videoId)
-      .map((item: any) => ({
-        videoId: item.id.videoId,
-        title: item.snippet?.title || "Untitled",
-        channelTitle: item.snippet?.channelTitle,
-        thumbnailUrl:
-          item.snippet?.thumbnails?.medium?.url ||
-          item.snippet?.thumbnails?.default?.url,
-        durationSec: durations[item.id.videoId] || defaultDurationFallback(item.snippet?.title),
-      }));
-
-    // Cache results
-    searchResultsCache.set(cacheKey, { results, timestamp: Date.now() });
-
-    return results;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Error searching YouTube:", {
-      error: errorMsg,
-      query: artist ? `${title} ${artist}` : title,
-    });
-    return [];
+  try {
+    return await searchPromise;
   } finally {
-    searchInProgress.delete(searchKey);
+    searchInProgress.delete(rawKey);
   }
 }
 
 /**
- * ─── Perform YouTube search API call
+ * ─── Low-level YouTube Search API Call
  */
-async function performSearch(query: string): Promise<any> {
+async function performRawSearch(query: string): Promise<any> {
   const params = new URLSearchParams({
     part: "snippet",
     type: "video",
+    videoEmbeddable: "true", // Only request embeddable videos from YouTube API
     q: query,
     maxResults: "10",
     key: API_KEY!,
   });
 
   const response = await fetch(`${YOUTUBE_API_BASE}/search?${params}`, {
-    headers: { "User-Agent": "Cassette/2.0" },
+    headers: { "User-Agent": "Cassette/3.0" },
   });
 
   if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    console.error(`YouTube search error: ${response.status}`, { query });
-    if (errorBody) console.error("Error details:", errorBody);
+    console.error(`[performRawSearch] API error: ${response.status}`, { query });
     return { items: [] };
   }
 
@@ -147,50 +255,139 @@ async function performSearch(query: string): Promise<any> {
 }
 
 /**
- * ─── Batch fetch video durations (efficient quota usage)
- * Groups up to 50 video IDs per request
+ * ─── Batch fetch video details: contentDetails + status (embeddability & privacy)
  */
-async function batchFetchDurations(videoIds: string[]): Promise<Record<string, number>> {
+async function batchFetchVideoDetails(
+  videoIds: string[]
+): Promise<Record<string, { durationSec: number; embeddable: boolean; isPublic: boolean }>> {
   if (videoIds.length === 0) return {};
 
-  const durations: Record<string, number> = {};
+  const map: Record<string, { durationSec: number; embeddable: boolean; isPublic: boolean }> = {};
 
-  // Fetch in batches of 50 (YouTube API limit)
   for (let i = 0; i < videoIds.length; i += 50) {
     const batch = videoIds.slice(i, i + 50);
     const params = new URLSearchParams({
-      part: "contentDetails",
+      part: "contentDetails,status",
       id: batch.join(","),
       key: API_KEY!,
     });
 
     try {
       const response = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`, {
-        headers: { "User-Agent": "Cassette/2.0" },
+        headers: { "User-Agent": "Cassette/3.0" },
       });
 
-      if (!response.ok) {
-        console.error(`Duration fetch error: ${response.status}`);
-        continue;
-      }
+      if (!response.ok) continue;
 
       const data = await response.json();
       (data.items || []).forEach((item: any) => {
-        if (item.id && item.contentDetails?.duration) {
-          durations[item.id] = parseISO8601Duration(item.contentDetails.duration);
+        if (item.id) {
+          const duration = item.contentDetails?.duration
+            ? parseISO8601Duration(item.contentDetails.duration)
+            : 0;
+          const embeddable = item.status?.embeddable !== false;
+          const isPublic = item.status?.privacyStatus === "public";
+
+          map[item.id] = { durationSec: duration, embeddable, isPublic };
         }
       });
-    } catch (error) {
-      console.error("Error fetching durations:", error);
+    } catch (err) {
+      console.error("[batchFetchVideoDetails] Error:", err);
     }
   }
 
-  return durations;
+  return map;
 }
 
 /**
- * ─── Parse ISO 8601 duration to seconds
- * E.g., "PT3M45S" => 225, "PT1H30M" => 5400
+ * ─── Validate a single YouTube video at add-time
+ */
+export async function validateYouTubeVideo(videoId: string): Promise<{
+  isValid: boolean;
+  error?: string;
+  title?: string;
+  channelTitle?: string;
+  thumbnailUrl?: string;
+  durationSec?: number;
+}> {
+  if (!API_KEY) {
+    return { isValid: false, error: "YouTube API key not configured." };
+  }
+
+  try {
+    const params = new URLSearchParams({
+      part: "snippet,contentDetails,status",
+      id: videoId,
+      key: API_KEY,
+    });
+
+    const response = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`, {
+      headers: { "User-Agent": "Cassette/3.0" },
+    });
+
+    if (!response.ok) {
+      return { isValid: false, error: "Could not fetch video details from YouTube." };
+    }
+
+    const data = await response.json();
+    const item = data.items?.[0];
+
+    if (!item) {
+      return { isValid: false, error: "This YouTube video was not found or is private." };
+    }
+
+    // Embeddable check
+    if (item.status?.embeddable === false) {
+      return {
+        isValid: false,
+        error: "This video has playback restricted from third-party apps by its owner. Please pick another upload or official lyric video.",
+      };
+    }
+
+    const durationSec = item.contentDetails?.duration
+      ? parseISO8601Duration(item.contentDetails.duration)
+      : 0;
+
+    // Shorts filter
+    if (durationSec < 60) {
+      return {
+        isValid: false,
+        error: "This video is too short (less than 60 seconds). Full tracks are recommended for mixtapes.",
+      };
+    }
+
+    // Overly long video filter
+    if (durationSec > 900) {
+      return {
+        isValid: false,
+        error: "This video is longer than 15 minutes. Please select a standard track length for this tape side.",
+      };
+    }
+
+    return {
+      isValid: true,
+      title: item.snippet?.title,
+      channelTitle: item.snippet?.channelTitle,
+      thumbnailUrl:
+        item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url,
+      durationSec,
+    };
+  } catch (error: any) {
+    console.error("[validateYouTubeVideo] Error:", error);
+    return { isValid: false, error: "Failed to validate YouTube track." };
+  }
+}
+
+/**
+ * ─── Get video duration in seconds (enhanced with status validation)
+ */
+export async function getVideoDurationEnhanced(videoId: string): Promise<number | null> {
+  const res = await validateYouTubeVideo(videoId);
+  return res.durationSec ?? null;
+}
+
+/**
+ * ─── Parse ISO 8601 duration string to seconds
  */
 export function parseISO8601Duration(duration: string): number {
   const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?/;
@@ -206,42 +403,10 @@ export function parseISO8601Duration(duration: string): number {
 }
 
 /**
- * ─── Estimate duration from title (fallback)
- */
-function defaultDurationFallback(title: string): number {
-  const timePatterns = [
-    /(\d+):(\d+):(\d+)/,  // HH:MM:SS
-    /(\d+):(\d+)/,         // MM:SS
-    /(\d+)\s*m\s*(\d+)\s*s/i,  // 3m 45s
-    /(\d+)\s*min/i,        // 3 min
-  ];
-
-  for (const pattern of timePatterns) {
-    const match = title.match(pattern);
-    if (match) {
-      if (pattern === timePatterns[0] && match[1]) {
-        return parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]);
-      } else if (pattern === timePatterns[1] && match[1] && match[2]) {
-        return parseInt(match[1]) * 60 + parseInt(match[2]);
-      } else if (pattern === timePatterns[2] && match[1] && match[2]) {
-        return parseInt(match[1]) * 60 + parseInt(match[2]);
-      } else if (pattern === timePatterns[3] && match[1]) {
-        return parseInt(match[1]) * 60;
-      }
-    }
-  }
-
-  return 180; // Default to 3 minutes
-}
-
-/**
- * ─── Search for YouTube playlists by query
+ * ─── Search for YouTube playlists
  */
 export async function searchPlaylists(query: string): Promise<YoutubePlaylist[]> {
-  if (!API_KEY) {
-    console.error("YOUTUBE_API_KEY not configured");
-    return [];
-  }
+  if (!API_KEY) return [];
 
   try {
     const params = new URLSearchParams({
@@ -253,23 +418,16 @@ export async function searchPlaylists(query: string): Promise<YoutubePlaylist[]>
     });
 
     const response = await fetch(`${YOUTUBE_API_BASE}/search?${params}`, {
-      headers: { "User-Agent": "Cassette/2.0" },
+      headers: { "User-Agent": "Cassette/3.0" },
     });
 
-    if (!response.ok) {
-      console.error(`YouTube API error: ${response.status} ${response.statusText}`);
-      return [];
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
+    if (!data.items || data.items.length === 0) return [];
 
-    if (!data.items || data.items.length === 0) {
-      return [];
-    }
-
-    // Get detailed info for each playlist
     const playlistIds = data.items
-      .map((item: any) => item.id.playlistId)
+      .map((item: any) => item.id?.playlistId)
       .filter(Boolean)
       .join(",");
 
@@ -281,19 +439,11 @@ export async function searchPlaylists(query: string): Promise<YoutubePlaylist[]>
       key: API_KEY,
     });
 
-    const detailsResponse = await fetch(
-      `${YOUTUBE_API_BASE}/playlists?${detailsParams}`,
-      {
-        headers: { "User-Agent": "Cassette/2.0" },
-      }
-    );
+    const detailsResponse = await fetch(`${YOUTUBE_API_BASE}/playlists?${detailsParams}`, {
+      headers: { "User-Agent": "Cassette/3.0" },
+    });
 
-    if (!detailsResponse.ok) {
-      console.error(
-        `YouTube API details error: ${detailsResponse.status} ${detailsResponse.statusText}`
-      );
-      return [];
-    }
+    if (!detailsResponse.ok) return [];
 
     const detailsData = await detailsResponse.json();
 
@@ -302,36 +452,30 @@ export async function searchPlaylists(query: string): Promise<YoutubePlaylist[]>
       title: item.snippet?.title || "Untitled Playlist",
       description: item.snippet?.description,
       thumbnail:
-        item.snippet?.thumbnails?.medium?.url ||
-        item.snippet?.thumbnails?.default?.url,
+        item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url,
       channelTitle: item.snippet?.channelTitle,
       itemCount: item.contentDetails?.itemCount || 0,
     }));
   } catch (error) {
-    console.error("Error searching playlists:", error);
+    console.error("[searchPlaylists] Error:", error);
     return [];
   }
 }
 
 /**
- * ─── Fetch all items from a YouTube playlist
+ * ─── Fetch playlist items (up to maxResults)
  */
-export async function fetchPlaylistItemsEnhanced(
+export async function fetchPlaylistItems(
   playlistId: string,
   maxResults = 24
 ): Promise<YoutubePlaylistItem[]> {
-  if (!API_KEY) {
-    console.error("YOUTUBE_API_KEY not configured");
-    return [];
-  }
+  if (!API_KEY) return [];
 
   try {
     const items: YoutubePlaylistItem[] = [];
     let pageToken: string | undefined;
     let position = 0;
-    const videoIds: string[] = [];
 
-    // Fetch playlist items
     while (position < maxResults && (!pageToken || pageToken)) {
       const params = new URLSearchParams({
         part: "snippet,contentDetails",
@@ -342,32 +486,25 @@ export async function fetchPlaylistItemsEnhanced(
       });
 
       const response = await fetch(`${YOUTUBE_API_BASE}/playlistItems?${params}`, {
-        headers: { "User-Agent": "Cassette/2.0" },
+        headers: { "User-Agent": "Cassette/3.0" },
       });
 
-      if (!response.ok) {
-        console.error(`YouTube API error: ${response.status} ${response.statusText}`);
-        break;
-      }
+      if (!response.ok) break;
 
       const data = await response.json();
-
       if (!data.items) break;
 
       for (const item of data.items) {
         if (position >= maxResults) break;
-
         const videoId = item.contentDetails?.videoId;
         if (!videoId) continue;
 
-        videoIds.push(videoId);
         items.push({
           videoId,
           title: item.snippet?.title || "Untitled",
           channelTitle: item.snippet?.channelTitle,
           thumbnail:
-            item.snippet?.thumbnails?.medium?.url ||
-            item.snippet?.thumbnails?.default?.url,
+            item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url,
           position,
         });
 
@@ -378,62 +515,9 @@ export async function fetchPlaylistItemsEnhanced(
       if (!pageToken || position >= maxResults) break;
     }
 
-    // Batch fetch all durations at once
-    if (videoIds.length > 0) {
-      const durations = await batchFetchDurations(videoIds);
-      items.forEach((item) => {
-        item.durationSec = durations[item.videoId];
-      });
-    }
-
     return items;
   } catch (error) {
-    console.error("Error fetching playlist items:", error);
+    console.error("[fetchPlaylistItems] Error:", error);
     return [];
   }
-}
-
-/**
- * ─── Get video duration in seconds
- */
-export async function getVideoDurationEnhanced(videoId: string): Promise<number | null> {
-  if (!API_KEY || !videoId || videoId === "undefined") {
-    return null;
-  }
-
-  try {
-    const params = new URLSearchParams({
-      part: "contentDetails",
-      id: videoId,
-      key: API_KEY,
-    });
-
-    const response = await fetch(`${YOUTUBE_API_BASE}/videos?${params}`, {
-      headers: { "User-Agent": "Cassette/2.0" },
-    });
-
-    if (!response.ok) {
-      console.warn(`Duration fetch failed for ${videoId}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    const item = data.items?.[0];
-
-    if (!item?.contentDetails?.duration) {
-      return null;
-    }
-
-    return parseISO8601Duration(item.contentDetails.duration);
-  } catch (error) {
-    console.error("Error fetching video duration:", error);
-    return null;
-  }
-}
-
-/**
- * ─── Clear search cache (for testing)
- */
-export function clearSearchCache() {
-  searchResultsCache.clear();
 }

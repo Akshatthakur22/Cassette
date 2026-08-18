@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import {
   startVoiceRecording,
   stopVoiceRecording,
   uploadVoiceMessage,
-  getAudioDuration,
   formatDuration,
   VOICE_CONFIG,
 } from "@/app/lib/voice-messages";
@@ -22,6 +21,7 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   const startRecording = async () => {
     console.log("[VoiceRecorder] Starting recording...");
@@ -36,6 +36,7 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
     mediaRecorderRef.current = recorder;
     setIsRecording(true);
     setDuration(0);
+    startTimeRef.current = Date.now();
 
     // Start recording
     recorder.start();
@@ -63,10 +64,15 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
 
+    const elapsedSeconds = startTimeRef.current > 0
+      ? Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
+      : Math.max(1, duration);
+
     const blob = await stopVoiceRecording(mediaRecorderRef.current);
     console.log("[VoiceRecorder] Blob captured:", {
       size: blob.size,
       type: blob.type,
+      exactDuration: elapsedSeconds,
     });
 
     if (blob.size === 0) {
@@ -82,9 +88,9 @@ export function VoiceRecorder({ tapeId, onRecordingComplete }: VoiceRecorderProp
     }
 
     setIsUploading(true);
-    console.log("[VoiceRecorder] Uploading blob to API...");
+    console.log("[VoiceRecorder] Uploading blob to API with duration:", elapsedSeconds);
 
-    const result = await uploadVoiceMessage(blob, tapeId);
+    const result = await uploadVoiceMessage(blob, tapeId, elapsedSeconds);
     console.log("[VoiceRecorder] Upload result:", result);
 
     if (result) {

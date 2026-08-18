@@ -10,10 +10,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "event required" }, { status: 400 });
     }
 
-    // Track the event
-    // Use a generic distinct ID since we're on client
+    // Track the event and flush immediately before returning response
     const distinctId = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "anonymous";
-    await trackEvent(distinctId, event, properties);
+    await trackEvent(distinctId, event, properties, true);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

@@ -39,7 +39,7 @@ export default function ManageTapeClient({ tape, draftToken }: Props) {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden flex flex-col" style={{ background: "#060408" }}>
+    <div className="relative min-h-screen overflow-x-hidden flex flex-col pb-20" style={{ background: "#060408" }}>
       <HeroScene style={((["classic","y2k","love","road_trip"].includes(tape.style as string) ? tape.style : "classic") as "classic" | "y2k" | "love" | "road_trip") ?? "classic"} />
 
       <div className="relative z-10 flex flex-col flex-1">

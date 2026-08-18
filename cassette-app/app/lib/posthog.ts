@@ -31,11 +31,12 @@ export function getPostHogClient(): PostHog {
 export async function trackEvent(
   distinctId: string,
   event: string,
-  properties?: Record<string, any>
+  properties?: Record<string, any>,
+  shouldFlush = false
 ) {
   const posthog = getPostHogClient();
   try {
-    await posthog.capture({
+    posthog.capture({
       distinctId,
       event,
       properties: {
@@ -43,8 +44,21 @@ export async function trackEvent(
         timestamp: new Date().toISOString(),
       },
     });
+    if (shouldFlush && typeof (posthog as any).flush === "function") {
+      await (posthog as any).flush();
+    }
   } catch (error) {
     console.error("PostHog tracking error:", error);
+  }
+}
+
+export async function flushPostHog() {
+  if (client && typeof (client as any).flush === "function") {
+    try {
+      await (client as any).flush();
+    } catch (e) {
+      console.warn("PostHog flush error:", e);
+    }
   }
 }
 
@@ -54,7 +68,7 @@ export async function identifyUser(
 ) {
   const posthog = getPostHogClient();
   try {
-    await posthog.identify({
+    posthog.identify({
       distinctId,
       properties,
     });

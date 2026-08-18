@@ -1,5 +1,4 @@
 "use client";
-
 import { getTapeStyleAriaLabel, getRelationshipAriaLabel, announceToScreenReader } from "@/app/lib/accessibility";
 
 interface Track {
@@ -19,6 +18,8 @@ interface AccessibleTapeViewProps {
   tracks: Track[];
   createdAt?: Date;
   description?: string;
+  className?: string;
+  showActions?: boolean;
 }
 
 /**
@@ -34,23 +35,19 @@ export function AccessibleTapeView({
   tracks,
   createdAt,
   description,
+  className = "",
+  showActions = true,
 }: AccessibleTapeViewProps) {
-  const handleTapeOpen = () => {
-    const message = `Opened tape titled "${title}" from ${senderName}. This tape contains ${tracks.length} songs.`;
-    announceToScreenReader(message, "polite");
-  };
-
   const handleTrackSelect = (trackTitle: string) => {
     announceToScreenReader(`Now playing ${trackTitle}`, "polite");
   };
 
   return (
     <article
-      role="main"
+      role="region"
       id="tape-view"
       aria-label={`Tape titled ${title} from ${senderName}`}
-      className="max-w-2xl mx-auto p-6"
-      onLoad={handleTapeOpen}
+      className={`max-w-2xl mx-auto p-6 ${className}`}
     >
       {/* Header section */}
       <header className="mb-8">
@@ -108,7 +105,7 @@ export function AccessibleTapeView({
             Tape description
           </h2>
           <p className="text-gray-700 italic text-lg leading-relaxed">
-            "{description}"
+            &ldquo;{description}&rdquo;
           </p>
         </section>
       )}
@@ -162,7 +159,7 @@ export function AccessibleTapeView({
                   <div className="mt-2 p-3 bg-amber-50 rounded border border-amber-200">
                     <p className="text-sm text-gray-700">
                       <span className="font-medium">Note: </span>
-                      "{track.note}"
+                      &ldquo;{track.note}&rdquo;
                     </p>
                   </div>
                 )}
@@ -182,35 +179,37 @@ export function AccessibleTapeView({
       </section>
 
       {/* Actions */}
-      <footer
-        aria-labelledby="actions-heading"
-        className="border-t pt-6 flex flex-wrap gap-3"
-      >
-        <h2 id="actions-heading" className="sr-only">
-          Tape actions
-        </h2>
-        
-        <button
-          aria-label="Share this tape on social media or copy the link"
-          className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition"
+      {showActions && (
+        <footer
+          aria-labelledby="actions-heading"
+          className="border-t pt-6 flex flex-wrap gap-3"
         >
-          Share
-        </button>
+          <h2 id="actions-heading" className="sr-only">
+            Tape actions
+          </h2>
 
-        <button
-          aria-label="Report this tape for inappropriate content"
-          className="px-4 py-2 border border-red-500 text-red-600 rounded-lg hover:bg-red-50 transition"
-        >
-          Report
-        </button>
+          <button
+            aria-label="Share this tape on social media or copy the link"
+            className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition"
+          >
+            Share
+          </button>
 
-        <button
-          aria-label="Like or favorite this tape"
-          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
-        >
-          ♥️ Like
-        </button>
-      </footer>
+          <button
+            aria-label="Report this tape for inappropriate content"
+            className="px-4 py-2 border border-red-500 text-red-600 rounded-lg hover:bg-red-50 transition"
+          >
+            Report
+          </button>
+
+          <button
+            aria-label="Like or favorite this tape"
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+          >
+            ♥️ Like
+          </button>
+        </footer>
+      )}
     </article>
   );
 }

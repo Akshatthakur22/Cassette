@@ -159,34 +159,28 @@ function HardwareButton({
   color?: string;
   title?: string;
 }) {
-  const dim = size === "lg" ? 50 : size === "md" ? 44 : 44;
-  const radius = size === "lg" ? 10 : 8;
+  const sizeClasses =
+    size === "lg"
+      ? "w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl"
+      : size === "sm"
+      ? "w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg"
+      : "w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg";
 
   return (
     <motion.button
       onClick={onClick}
       aria-label={label}
       title={title}
-      whileTap={{ scale: 0.86, y: 2 }}
+      whileTap={{ scale: 0.88, y: 1.5 }}
       transition={{ type: "spring", stiffness: 420, damping: 18 }}
+      className={`flex-shrink-0 flex items-center justify-center cursor-pointer border-0 outline-none relative ${sizeClasses}`}
       style={{
-        width: dim,
-        height: dim,
-        borderRadius: radius,
-        flexShrink: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        cursor: "pointer",
-        border: "none",
-        outline: "none",
-        position: "relative",
         background: active && color
           ? `linear-gradient(175deg, ${color}E0 0%, ${color}A0 100%)`
           : "linear-gradient(175deg, #5A5040 0%, #3A3028 55%, #28201A 100%)",
         boxShadow: active
           ? `0 1px 0 rgba(255,255,255,0.07) inset, 0 -1px 0 rgba(0,0,0,0.55) inset, 0 2px 6px rgba(0,0,0,0.55)`
-          : `0 2px 0 rgba(255,255,255,0.10) inset, 0 -2px 0 rgba(0,0,0,0.55) inset, 0 4px 12px rgba(0,0,0,0.65)`,
+          : `0 2px 0 rgba(255,255,255,0.10) inset, 0 -2px 0 rgba(0,0,0,0.55) inset, 0 3px 8px rgba(0,0,0,0.65)`,
       }}
     >
       {/* Active LED */}
@@ -194,8 +188,8 @@ function HardwareButton({
         <motion.span
           className="absolute"
           style={{
-            top: 4,
-            right: 4,
+            top: 3,
+            right: 3,
             width: 3,
             height: 3,
             borderRadius: "50%",
@@ -209,8 +203,8 @@ function HardwareButton({
       {/* Pulse ring on play */}
       {active && size === "lg" && (
         <motion.span
-          className="absolute inset-0 pointer-events-none"
-          style={{ borderRadius: radius, border: `1.5px solid ${color ?? "#D4882A"}` }}
+          className="absolute inset-0 pointer-events-none rounded-lg sm:rounded-xl"
+          style={{ border: `1.5px solid ${color ?? "#D4882A"}` }}
           animate={{ scale: [1, 1.2, 1.2], opacity: [0.5, 0, 0] }}
           transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
         />
@@ -221,68 +215,6 @@ function HardwareButton({
 }
 
 /* ─── Track position pill dots ───────────────────────────────────────────── */
-function TrackDots({
-  tracks,
-  currentIndex,
-  accentColor,
-  onSelect,
-}: {
-  tracks: Track[];
-  currentIndex: number;
-  accentColor: string;
-  onSelect: (i: number) => void;
-}) {
-  // Only show up to 12 dots — beyond that just show "n/total"
-  const MAX = 12;
-  if (tracks.length > MAX) {
-    return (
-      <span
-        style={{
-          fontSize: "9px",
-          fontFamily: "'Courier New', monospace",
-          color: "#6A6850",
-          letterSpacing: "0.1em",
-        }}
-      >
-        {currentIndex + 1}/{tracks.length}
-      </span>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-[3px]" role="tablist" aria-label="Track list">
-      {tracks.map((t, i) => (
-        <motion.button
-          key={t.id}
-          onClick={() => onSelect(i)}
-          role="tab"
-          aria-selected={i === currentIndex}
-          aria-label={`Track ${i + 1}: ${t.title}`}
-          title={t.title}
-          whileHover={{ scale: 1.3 }}
-          whileTap={{ scale: 0.85 }}
-          style={{
-            width: i === currentIndex ? 16 : 5,
-            height: 4,
-            borderRadius: 3,
-            background:
-              i === currentIndex
-                ? accentColor
-                : i < currentIndex
-                  ? "rgba(184,200,160,0.45)"
-                  : "rgba(184,200,160,0.13)",
-            border: "none",
-            cursor: "pointer",
-            padding: 0,
-            flexShrink: 0,
-            boxShadow: i === currentIndex ? `0 0 7px ${accentColor}90` : "none",
-            transition: "width 0.3s cubic-bezier(0.22,1,0.36,1), background 0.25s ease",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 
 /* ─── Main PlayerBar ─────────────────────────────────────────────────────── */
 export default function PlayerBar({
@@ -312,6 +244,13 @@ export default function PlayerBar({
   const [showVideo, setShowVideo] = useState(false);
   const [ytReady, setYtReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [trackWarning, setTrackWarning] = useState<string | null>(null);
+
+  const [currentDuration, setCurrentDuration] = useState<number>(track?.durationSec || 0);
+
+  useEffect(() => {
+    setCurrentDuration(track?.durationSec || 0);
+  }, [track?.id, track?.durationSec]);
 
   // Initialize background playback on first mount
   useEffect(() => {
@@ -379,7 +318,11 @@ export default function PlayerBar({
             try {
               event.target.setVolume(100);
               event.target.unMute();
-              console.log("[PlayerBar] Player ready - volume set to 100, unmuted");
+              const dur = event.target.getDuration?.();
+              if (dur && dur > 0) {
+                setCurrentDuration(Math.round(dur));
+              }
+              console.log("[PlayerBar] Player ready - volume set to 100, unmuted, duration:", dur);
             } catch (e) {
               console.warn("[PlayerBar] Could not set volume/unmute on ready:", e);
             }
@@ -389,12 +332,22 @@ export default function PlayerBar({
             }
           },
           onStateChange(event: any) {
-            if (event.data === 1) trackClientEvent(CLIENT_EVENTS.TAPE_PLAYED, { videoId }).catch(() => {});
+            if (event.data === 1) {
+              const dur = event.target.getDuration?.();
+              if (dur && dur > 0) {
+                setCurrentDuration(Math.round(dur));
+              }
+              trackClientEvent(CLIENT_EVENTS.TAPE_PLAYED, { videoId }).catch(() => {});
+            }
             if (event.data === 0) onNextRef.current();
           },
           onError(event: any) { 
-            console.error("[PlayerBar] YouTube player error:", event.data);
-            onNextRef.current(); 
+            console.warn("[PlayerBar] YouTube player error (code " + event.data + "):", track?.title);
+            setTrackWarning("This track isn't available right now. Skipping to next track...");
+            setTimeout(() => {
+              setTrackWarning(null);
+              onNextRef.current();
+            }, 2200);
           },
         },
       });
@@ -416,11 +369,16 @@ export default function PlayerBar({
   }, [track?.providerTrackId, track?.provider]);
 
   useEffect(() => {
-    if (!playerRef.current || !track?.providerTrackId) return;
+    if (!playerRef.current || !track?.providerTrackId || track?.provider !== "youtube") return;
     try {
-      if (isPlaying) playerRef.current.loadVideoById(track.providerTrackId);
-      else playerRef.current.cueVideoById(track.providerTrackId);
-    } catch {}
+      if (isPlaying && typeof playerRef.current.loadVideoById === "function") {
+        playerRef.current.loadVideoById(track.providerTrackId);
+      } else if (typeof playerRef.current.cueVideoById === "function") {
+        playerRef.current.cueVideoById(track.providerTrackId);
+      }
+    } catch (e) {
+      console.warn("[PlayerBar] YouTube video load/cue error:", e);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track?.id]);
 
@@ -430,14 +388,18 @@ export default function PlayerBar({
       try { 
         if (isPlaying) {
           // Ensure unmute before playing
-          const beforeMute = playerRef.current.isMuted?.();
+          const beforeMute = typeof playerRef.current.isMuted === "function" ? playerRef.current.isMuted() : false;
           playerRef.current.unMute?.();
-          const afterMute = playerRef.current.isMuted?.();
+          const afterMute = typeof playerRef.current.isMuted === "function" ? playerRef.current.isMuted() : false;
           playerRef.current.setVolume?.(100);
           console.log("[PlayerBar] Playing with unmute:", { beforeMute, afterMute });
-          playerRef.current.playVideo();
+          if (typeof playerRef.current.playVideo === "function") {
+            playerRef.current.playVideo();
+          }
         } else {
-          playerRef.current.pauseVideo(); 
+          if (typeof playerRef.current.pauseVideo === "function") {
+            playerRef.current.pauseVideo();
+          }
         }
       } catch (e) {
         console.error("[PlayerBar] YouTube playback error:", e);
@@ -458,27 +420,30 @@ export default function PlayerBar({
     }
   }, [isPlaying, track?.provider]);
 
-  useEffect(() => {
-    // YouTube seeking
+  // ── Explicit Seek Handler (User-Initiated Only) ─────────────────────────
+  const handleExplicitSeek = useCallback((ratio: number) => {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    onSeek(clamped);
+
+    const activeDuration = currentDuration || track?.durationSec || 0;
+    if (activeDuration <= 0) return;
+
+    const targetSec = clamped * activeDuration;
+
     if (track?.provider === "youtube" && playerRef.current) {
-      const targetSec = progress * track.durationSec;
       try {
-        const cur = playerRef.current.getCurrentTime?.() ?? 0;
-        if (Math.abs(cur - targetSec) > 2) playerRef.current.seekTo(targetSec, true);
-      } catch {}
-    }
-    
-    // Voice recording seeking
-    if (track?.provider === "voice" && audioRef.current) {
-      const targetSec = progress * track.durationSec;
+        playerRef.current.seekTo(targetSec, true);
+      } catch (e) {
+        console.error("[PlayerBar] YouTube seek error:", e);
+      }
+    } else if (track?.provider === "voice" && audioRef.current) {
       try {
-        if (Math.abs(audioRef.current.currentTime - targetSec) > 0.5) {
-          audioRef.current.currentTime = targetSec;
-        }
-      } catch {}
+        audioRef.current.currentTime = targetSec;
+      } catch (e) {
+        console.error("[PlayerBar] Audio seek error:", e);
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress]);
+  }, [currentDuration, track?.durationSec, track?.provider, onSeek]);
 
   useEffect(() => {
     if (tickRef.current) clearInterval(tickRef.current);
@@ -486,18 +451,30 @@ export default function PlayerBar({
     tickRef.current = setInterval(() => {
       try {
         let elapsed = 0;
-        let dur = track?.durationSec ?? 0;
+        let dur = currentDuration || track?.durationSec || 0;
         
         // Get time from YouTube player
         if (track?.provider === "youtube" && playerRef.current) {
           elapsed = playerRef.current.getCurrentTime?.() ?? 0;
-          dur = playerRef.current.getDuration?.() ?? track?.durationSec ?? 0;
+          const ytDur = playerRef.current.getDuration?.();
+          if (ytDur && ytDur > 0) {
+            dur = ytDur;
+            if (Math.round(ytDur) !== currentDuration) {
+              setCurrentDuration(Math.round(ytDur));
+            }
+          }
         }
         
         // Get time from audio element
         if (track?.provider === "voice" && audioRef.current) {
           elapsed = audioRef.current.currentTime;
-          dur = (audioRef.current.duration || track?.durationSec) ?? 0;
+          const audioDur = audioRef.current.duration;
+          if (audioDur && !isNaN(audioDur) && isFinite(audioDur) && audioDur > 0) {
+            dur = audioDur;
+            if (Math.round(audioDur) !== currentDuration) {
+              setCurrentDuration(Math.round(audioDur));
+            }
+          }
         }
         
         if (dur > 0) {
@@ -519,12 +496,12 @@ export default function PlayerBar({
       }
     }, 500);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [isPlaying, track?.id, track]);
+  }, [isPlaying, track?.id, track, currentDuration]);
 
   // ── Scrubber interaction ──────────────────────────────────────────────────
   function scrubAt(clientX: number, rect: DOMRect) {
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    onSeek(ratio);
+    handleExplicitSeek(ratio);
   }
   function handleScrubberMouseDown(e: React.MouseEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -544,8 +521,11 @@ export default function PlayerBar({
 
   if (!track) return null;
 
-  const elapsed = Math.round(progress * (track.durationSec ?? 0));
-  const lcdText = `${track.artist ? `${track.artist} – ` : ""}${track.title}    ${formatDuration(elapsed)} / ${formatDuration(track.durationSec)}`;
+  const displayDuration = currentDuration || track.durationSec || 0;
+  const elapsed = Math.round(progress * displayDuration);
+  const lcdText = trackWarning
+    ? trackWarning
+    : `${track.artist ? `${track.artist} – ` : ""}${track.title}    ${formatDuration(elapsed)} / ${formatDuration(displayDuration)}`;
   const sideLabel = track.side === "B" ? "B" : "A";
 
   return (
@@ -581,8 +561,8 @@ export default function PlayerBar({
           aria-valuemax={100}
           tabIndex={0}
           onKeyDown={e => {
-            if (e.key === "ArrowRight") onSeek(Math.min(1, progress + 0.01));
-            if (e.key === "ArrowLeft")  onSeek(Math.max(0, progress - 0.01));
+            if (e.key === "ArrowRight") handleExplicitSeek(Math.min(1, progress + 0.01));
+            if (e.key === "ArrowLeft")  handleExplicitSeek(Math.max(0, progress - 0.01));
           }}
         >
           {/* Fill */}
@@ -620,10 +600,10 @@ export default function PlayerBar({
         </div>
 
         {/* ── MAIN DECK ROW ─────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 px-3 py-2.5 max-w-3xl mx-auto">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 py-2 sm:py-2.5 max-w-3xl mx-auto">
 
           {/* LEFT — Play/Pause + Stop */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="lg"
               onClick={() => { playClickSound(true); isPlaying ? onPause() : onPlay(); }}
@@ -646,7 +626,7 @@ export default function PlayerBar({
 
             <HardwareButton
               size="sm"
-              onClick={() => { playClickSound(true); onPause(); onSeek(0); }}
+              onClick={() => { playClickSound(true); onPause(); handleExplicitSeek(0); }}
               aria-label="Stop"
               color="#C03030"
               active={!isPlaying && progress === 0}
@@ -658,20 +638,19 @@ export default function PlayerBar({
 
           {/* CENTER — LCD panel */}
           <div
-            className="flex-1 min-w-0 flex flex-col"
+            className="flex-1 min-w-0 flex items-center"
             style={{
               background: "linear-gradient(155deg, #182010 0%, #0C1208 100%)",
               border: "1.5px solid #0A0D07",
-              borderRadius: 6,
-              padding: "5px 9px 4px",
+              borderRadius: 7,
+              padding: "7px 10px",
               boxShadow:
                 "0 0 0 1px rgba(255,255,255,0.025), " +
                 "inset 0 2px 10px rgba(0,0,0,0.65), " +
                 "inset 0 0 18px rgba(80,120,40,0.035)",
-              gap: 3,
             }}
           >
-            {/* Top row: cursor + scrolling text + VU meter */}
+            {/* Ticker row: cursor + badge + scrolling text + VU meter */}
             <AnimatePresence mode="wait">
               <motion.div
                 key={track.id}
@@ -679,7 +658,7 @@ export default function PlayerBar({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.12 }}
-                className="flex items-center gap-2 min-w-0"
+                className="flex items-center gap-2 min-w-0 w-full"
               >
                 {/* Blinking block cursor */}
                 <motion.span
@@ -688,7 +667,7 @@ export default function PlayerBar({
                   aria-hidden="true"
                   style={{
                     width: 5,
-                    height: 10,
+                    height: 11,
                     borderRadius: 1,
                     background: "#B8C8A0",
                     flexShrink: 0,
@@ -697,41 +676,53 @@ export default function PlayerBar({
                   }}
                 />
 
-                {/* SIDE badge */}
-                <span
-                  style={{
-                    fontSize: "8px",
-                    fontFamily: "'Courier New', monospace",
-                    color: accentColor,
-                    background: `${accentColor}22`,
-                    border: `1px solid ${accentColor}44`,
-                    borderRadius: 3,
-                    padding: "0 4px",
-                    letterSpacing: "0.1em",
-                    flexShrink: 0,
-                    lineHeight: "14px",
-                  }}
-                >
-                  {sideLabel}
-                </span>
+                {/* SIDE / VOICE badge */}
+                {track.provider === "voice" ? (
+                  <span
+                    className="flex items-center gap-0.5"
+                    style={{
+                      fontSize: "8px",
+                      fontFamily: "'Courier New', monospace",
+                      color: "#F59E0B",
+                      background: "rgba(245, 158, 11, 0.18)",
+                      border: "1px solid rgba(245, 158, 11, 0.4)",
+                      borderRadius: 3,
+                      padding: "0 4px",
+                      letterSpacing: "0.08em",
+                      flexShrink: 0,
+                      lineHeight: "14px",
+                    }}
+                  >
+                    🎙️ VOICE
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontSize: "8px",
+                      fontFamily: "'Courier New', monospace",
+                      color: accentColor,
+                      background: `${accentColor}22`,
+                      border: `1px solid ${accentColor}44`,
+                      borderRadius: 3,
+                      padding: "0 4px",
+                      letterSpacing: "0.1em",
+                      flexShrink: 0,
+                      lineHeight: "14px",
+                    }}
+                  >
+                    {sideLabel}
+                  </span>
+                )}
 
                 <LCDTicker text={lcdText} />
 
                 <VUMeter isPlaying={isPlaying} accent={accentColor} />
               </motion.div>
             </AnimatePresence>
-
-            {/* Bottom row: track dots */}
-            <TrackDots
-              tracks={tracks}
-              currentIndex={currentIndex}
-              accentColor={accentColor}
-              onSelect={i => onTrackSelect?.(i)}
-            />
           </div>
 
           {/* RIGHT — ◄◄ ►► + video toggle */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="md"
               onClick={() => { playSkipSound(true); onPrev(); }}
@@ -755,20 +746,12 @@ export default function PlayerBar({
               onClick={() => setShowVideo(v => !v)}
               aria-label={showVideo ? "Hide video" : "Show video"}
               title={showVideo ? "Hide video" : "Show video"}
-              whileTap={{ scale: 0.86, y: 1 }}
+              whileTap={{ scale: 0.88, y: 1 }}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg flex-shrink-0 flex items-center justify-center border-0 cursor-pointer"
               style={{
-                width: 30,
-                height: 30,
-                borderRadius: 7,
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
                 background: showVideo
                   ? `linear-gradient(175deg, ${accentColor}90 0%, ${accentColor}55 100%)`
                   : "linear-gradient(175deg, #3A3028 0%, #241C14 100%)",
-                border: "none",
-                cursor: "pointer",
                 boxShadow: "0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 8px rgba(0,0,0,0.5)",
               }}
             >

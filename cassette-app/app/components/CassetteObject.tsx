@@ -30,10 +30,29 @@ function useCassetteFont() {
     link.id = FONT_LINK_ID;
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Oswald:wght@400;500;600;700&display=swap";
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Oswald:wght@500;600;700&display=swap";
     document.head.appendChild(link);
   }, []);
 }
+
+const TAPE_THEMES: Record<string, { body: string; bodyDark: string; labelBg: string; text: string; accent: string; sideBg: string; sideText: string }> = {
+  cream:       { body: "#C5B288", bodyDark: "#9A8556", labelBg: "#FFFDF6", text: "#2A1808", accent: "#D4882A", sideBg: "#5A2430", sideText: "#FFF8F0" },
+  cherry:      { body: "#D63854", bodyDark: "#9E1C34", labelBg: "#FFF8F9", text: "#24040A", accent: "#E84060", sideBg: "#24040A", sideText: "#FFF8F0" },
+  peach:       { body: "#D86835", bodyDark: "#9E4218", labelBg: "#FFF9F5", text: "#280E04", accent: "#E8703A", sideBg: "#3A1508", sideText: "#FFF8F0" },
+  butter:      { body: "#DEC035", bodyDark: "#9E8518", labelBg: "#FFFDF0", text: "#2E2404", accent: "#D4A820", sideBg: "#3A2A08", sideText: "#FFF8F0" },
+  sky:         { body: "#4BA8DE", bodyDark: "#2674A4", labelBg: "#F5FBFF", text: "#061A28", accent: "#38A8E8", sideBg: "#0C2E46", sideText: "#FFF8F0" },
+  pool:        { body: "#1A8C8C", bodyDark: "#0F5A5A", labelBg: "#F2FFFF", text: "#042020", accent: "#1A9898", sideBg: "#062E2E", sideText: "#FFF8F0" },
+  lavender:    { body: "#9E70D0", bodyDark: "#683E96", labelBg: "#FAF5FF", text: "#1E0B30", accent: "#9060C8", sideBg: "#280E42", sideText: "#FFF8F0" },
+  mint:        { body: "#32B254", bodyDark: "#1C7A34", labelBg: "#F4FFF7", text: "#042210", accent: "#28A858", sideBg: "#083418", sideText: "#FFF8F0" },
+  transparent: { body: "#587898", bodyDark: "#304860", labelBg: "#F8FCFF", text: "#0A1E30", accent: "#5AC8FA", sideBg: "#12283A", sideText: "#FFF8F0" },
+  smoky:       { body: "#3A3540", bodyDark: "#222026", labelBg: "#2A2530", text: "#F0EDF5", accent: "#A070D8", sideBg: "#16141A", sideText: "#F0EDF5" },
+  classic:     { body: "#C5B288", bodyDark: "#9A8556", labelBg: "#FFFDF6", text: "#2A1808", accent: "#D4882A", sideBg: "#5A2430", sideText: "#FFF8F0" },
+  y2k:         { body: "#CC38E8", bodyDark: "#8E18A4", labelBg: "#FFF5FF", text: "#150028", accent: "#00E5FF", sideBg: "#150028", sideText: "#00E5FF" },
+  love:        { body: "#C84E60", bodyDark: "#8E2434", labelBg: "#FFF5F7", text: "#240408", accent: "#F7A8B0", sideBg: "#3A0610", sideText: "#FFF8F0" },
+  road_trip:   { body: "#52759A", bodyDark: "#344E68", labelBg: "#F5F9FF", text: "#081420", accent: "#D4882A", sideBg: "#122030", sideText: "#FFF8F0" },
+  school:      { body: "#425682", bodyDark: "#283858", labelBg: "#F5F8FF", text: "#0A1428", accent: "#7A8FB0", sideBg: "#141E34", sideText: "#FFF8F0" },
+  summer:      { body: "#DE9420", bodyDark: "#9E640E", labelBg: "#FFFDF5", text: "#281604", accent: "#FFD966", sideBg: "#422204", sideText: "#FFF8F0" },
+};
 
 export default function CassetteObject({
   side,
@@ -43,12 +62,9 @@ export default function CassetteObject({
   senderName,
   style = "cream",
   onFlipSide,
-  isTyping = false,
   className = "",
   progress = 0,
-  cassetteState,
   showFlipButton = true,
-  size = "md",
 }: CassetteObjectProps) {
   useCassetteFont();
 
@@ -66,16 +82,17 @@ export default function CassetteObject({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [, forceTick] = useState(0);
 
+  const theme = TAPE_THEMES[style] ?? TAPE_THEMES.cream;
   const powerOn = isPlaying || localMode === "playing";
   const mode = isPlaying ? "playing" : localMode;
 
-  // Hydration check
   useEffect(() => {
     setIsHydrated(true);
   }, []);
 
   useEffect(() => {
     setCounter(Math.floor(progress * 999));
+    windRef.current = Math.max(0.1, Math.min(0.9, 0.15 + progress * 0.7));
   }, [progress]);
 
   useEffect(() => {
@@ -84,7 +101,7 @@ export default function CassetteObject({
       return;
     }
 
-    const speed = mode === "playing" ? 130 : mode === "ff" ? 420 : -420;
+    const speed = mode === "playing" ? 140 : mode === "ff" ? 440 : -440;
     const windSpeed = mode === "playing" ? 0.012 : mode === "ff" ? 0.05 : -0.05;
 
     lastTickRef.current = performance.now();
@@ -100,10 +117,9 @@ export default function CassetteObject({
       leftAngle.current += speed * dt * (0.6 + (1 - leftFullness) * 0.8);
       rightAngle.current += speed * dt * (0.6 + (1 - rightFullness) * 0.8);
 
-      windRef.current = Math.max(0.06, Math.min(0.94, windRef.current + windSpeed * dt));
+      windRef.current = Math.max(0.08, Math.min(0.92, windRef.current + windSpeed * dt));
 
       counterAccum += dt * (mode === "playing" ? 4 : mode === "ff" ? 14 : -14);
-
       if (Math.abs(counterAccum) >= 1) {
         const delta = Math.trunc(counterAccum);
         counterAccum -= delta;
@@ -115,7 +131,6 @@ export default function CassetteObject({
     };
 
     rafRef.current = requestAnimationFrame(step);
-
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
@@ -146,22 +161,6 @@ export default function CassetteObject({
     setTilt({ x: 0, y: 0 });
   };
 
-  const handlePlayClick = () => {
-    setLocalMode(localMode === "playing" ? "stopped" : "playing");
-  };
-
-  const handleRewindClick = () => {
-    setLocalMode("rewind");
-  };
-
-  const handleFFClick = () => {
-    setLocalMode("ff");
-  };
-
-  const handleStopClick = () => {
-    setLocalMode("stopped");
-  };
-
   return (
     <div
       className={className}
@@ -188,445 +187,380 @@ export default function CassetteObject({
             }deg)`,
           }}
         >
+          {/* ── 3D CASSETTE BODY CHASSIS ─────────────────────────────────── */}
           <div
             style={{
               position: "relative",
-              borderRadius: 10,
-              padding: 8,
-              background:
-                "linear-gradient(155deg, #c9b98a 0%, #b7a476 45%, #a4905f 100%)",
+              borderRadius: 12,
+              padding: "10px 10px 14px",
+              background: `linear-gradient(155deg, ${theme.body} 0%, ${theme.bodyDark} 100%)`,
               boxShadow: isHydrated
                 ? `
                 0 2px 0 rgba(255,255,255,0.4) inset,
-                0 -6px 14px rgba(0,0,0,0.25) inset,
-                ${6 + tilt.y * 0.6}px ${16 - tilt.x}px 36px rgba(20,15,4,0.45),
-                0 3px 0 rgba(0,0,0,0.15)
+                0 -6px 14px rgba(0,0,0,0.3) inset,
+                ${6 + tilt.y * 0.6}px ${16 - tilt.x}px 36px rgba(18,12,4,0.45),
+                0 3px 0 rgba(0,0,0,0.2)
               `
                 : `
                 0 2px 0 rgba(255,255,255,0.4) inset,
-                0 -6px 14px rgba(0,0,0,0.25) inset,
-                6px 16px 36px rgba(20,15,4,0.45),
-                0 3px 0 rgba(0,0,0,0.15)
+                0 -6px 14px rgba(0,0,0,0.3) inset,
+                6px 16px 36px rgba(18,12,4,0.45),
+                0 3px 0 rgba(0,0,0,0.2)
               `,
+              border: "1px solid rgba(0,0,0,0.25)",
             }}
           >
-            {/* Fine brushed texture */}
+            {/* Fine tactile textured finish */}
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                borderRadius: 10,
-                background:
-                  "repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent 3px)",
+                borderRadius: 12,
+                backgroundImage:
+                  "repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px)",
                 pointerEvents: "none",
               }}
             />
 
-            {/* 3D Gloss highlight that responds to tilt */}
+            {/* Left & Right Authentic Ribbed Grip Strips */}
+            <div
+              style={{
+                position: "absolute",
+                top: 24,
+                left: 3,
+                width: 5,
+                height: 140,
+                backgroundImage:
+                  "repeating-linear-gradient(180deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 2px, rgba(255,255,255,0.15) 2px, rgba(255,255,255,0.15) 4px)",
+                borderRadius: 2,
+                opacity: 0.7,
+              }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                top: 24,
+                right: 3,
+                width: 5,
+                height: 140,
+                backgroundImage:
+                  "repeating-linear-gradient(180deg, rgba(0,0,0,0.25) 0px, rgba(0,0,0,0.25) 2px, rgba(255,255,255,0.15) 2px, rgba(255,255,255,0.15) 4px)",
+                borderRadius: 2,
+                opacity: 0.7,
+              }}
+            />
+
+            {/* 3D Specular glare highlight responding to tilt */}
             <div
               style={{
                 position: "absolute",
                 inset: 0,
-                borderRadius: 10,
+                borderRadius: 12,
                 background: isHydrated
-                  ? `radial-gradient(circle at ${
-                      50 + tilt.y * 2.2
-                    }% ${20 - tilt.x * 2}%, rgba(255,255,255,0.38), transparent 38%)`
-                  : "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.38), transparent 38%)",
+                  ? `radial-gradient(circle at ${50 + tilt.y * 2.2}% ${20 - tilt.x * 2}%, rgba(255,255,255,0.36), transparent 42%)`
+                  : "radial-gradient(circle at 50% 20%, rgba(255,255,255,0.36), transparent 42%)",
                 pointerEvents: "none",
                 mixBlendMode: "overlay",
               }}
             />
 
-            {/* Brand watermark */}
-            <div
-              style={{
-                position: "absolute",
-                top: 4,
-                right: 38,
-                fontSize: 7.5,
-                letterSpacing: 1,
-                color: "rgba(60,50,25,0.35)",
-                fontWeight: 600,
-              }}
-            >
-              ◆ TDK
-            </div>
-
-            {/* Corner screws - more realistic 3D */}
+            {/* 5 Precision Corner Screws (4 corners + 1 bottom-center) */}
             {[
-              { top: 4, left: 4 },
-              { top: 4, right: 4 },
-              { bottom: 4, left: 4 },
-              { bottom: 4, right: 4 },
+              { top: 5, left: 5 },
+              { top: 5, right: 5 },
+              { bottom: 5, left: 5 },
+              { bottom: 5, right: 5 },
+              { bottom: 38, left: "50%", transform: "translateX(-50%)" },
             ].map((pos, i) => (
               <Screw key={i} style={{ position: "absolute", ...pos }} />
             ))}
 
-            {/* Top label — compact cream paper */}
+            {/* ── TOP PAPER J-CARD LABEL ─────────────────────────────────── */}
             <div
               style={{
-                margin: "14px 18px 0",
-                background: "linear-gradient(180deg,#f2ede1,#e6ded0)",
-                borderRadius: 2.5,
-                padding: "6px 8px",
+                margin: "12px 14px 0",
+                background: theme.labelBg,
+                borderRadius: 4,
+                padding: "8px 10px",
                 boxShadow:
-                  "0 2px 6px rgba(0,0,0,0.45), inset 0 -1px 2px rgba(0,0,0,0.08)",
+                  "0 2px 8px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(0,0,0,0.06)",
                 display: "flex",
                 alignItems: "center",
                 gap: 8,
+                position: "relative",
+                border: "1px solid rgba(0,0,0,0.08)",
               }}
             >
-              {/* Side badge */}
+              {/* Side Badge (A or B) */}
               <div
                 style={{
-                  width: 24,
-                  height: 24,
+                  width: 26,
+                  height: 26,
                   flexShrink: 0,
-                  background: "linear-gradient(180deg,#5a2430,#42101c)",
-                  color: "#f2ede1",
+                  background: theme.sideBg,
+                  color: theme.sideText,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: 14,
-                  borderRadius: 1.5,
-                  boxShadow: "inset 0 1px 1px rgba(255,255,255,0.15), 0 2px 3px rgba(0,0,0,0.3)",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  borderRadius: 3,
+                  boxShadow: "inset 0 1px 2px rgba(255,255,255,0.25), 0 2px 4px rgba(0,0,0,0.3)",
                 }}
               >
                 {side}
               </div>
-              <div style={{ flex: 1, borderTop: "1px solid #8a2f2f" }} />
-              <div
-                style={{
-                  fontFamily: "'Caveat', cursive",
-                  fontSize: 19,
-                  fontWeight: 700,
-                  color: "#2a2620",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  maxWidth: 130,
-                }}
-              >
-                {title || "Untitled Tape"}
+
+              {/* Title rule line & handwritten title */}
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ flex: 1, height: 1, background: "rgba(180,40,40,0.6)" }} />
+                  <span style={{ fontSize: 7, letterSpacing: "0.15em", color: "#8E8E93", fontWeight: 700 }}>
+                    CASSETTE.FM
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: 20,
+                    fontWeight: 700,
+                    color: theme.text,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {title || "Untitled Tape"}
+                </div>
               </div>
             </div>
 
-            {/* Reel window — rich colors, enhanced visual depth */}
+            {/* ── CENTER TRANSPARENT VIEWING WINDOW & SPOOLS ────────────── */}
             <div
               style={{
                 position: "relative",
-                margin: "7px 12px 0",
-                background: "linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 40%, #000 100%)",
-                borderRadius: 5,
-                padding: "12px 10px 10px",
+                margin: "8px 10px 0",
+                background: "linear-gradient(180deg, #181614 0%, #0D0C0A 40%, #050403 100%)",
+                borderRadius: 7,
+                padding: "8px 12px 6px",
                 boxShadow:
-                  "inset 0 4px 12px rgba(0,0,0,0.95), inset 0 -2px 6px rgba(100,100,100,0.08), 0 1px 3px rgba(0,0,0,0.5)",
-                border: "1px solid #222",
+                  "inset 0 4px 14px rgba(0,0,0,0.95), inset 0 -2px 6px rgba(255,255,255,0.06), 0 2px 4px rgba(0,0,0,0.4)",
+                border: "1.5px solid #201D1A",
               }}
             >
+              {/* Specular Diagonal Glass Glare */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: 6,
+                  background:
+                    "linear-gradient(125deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 28%, transparent 45%, rgba(255,255,255,0.08) 85%, transparent 100%)",
+                  pointerEvents: "none",
+                  zIndex: 4,
+                }}
+              />
+
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  padding: "0 8px",
                   position: "relative",
-                  height: 60,
-                  gap: 6,
+                  height: 68,
+                  gap: 8,
                 }}
               >
-                {/* Left reel */}
-                <div style={{ position: "relative", zIndex: 3 }}>
-                  {isHydrated && <Reel angle={leftAngle.current} fullness={1 - windRef.current} />}
-                  {!isHydrated && <Reel angle={0} fullness={0.68} />}
+                {/* Left Reel Spool (Supply) */}
+                <div style={{ position: "relative", zIndex: 2, flexShrink: 0 }}>
+                  <PrecisionReel
+                    angle={leftAngle.current}
+                    fullness={1 - windRef.current}
+                    accentColor={theme.accent}
+                  />
                 </div>
 
-                {/* Center tape area - Rich gradient with better visual effects */}
+                {/* Center Tape Window & Bridge */}
                 <div
                   style={{
                     flex: 1,
-                    height: 48,
+                    height: 52,
                     borderRadius: 4,
                     position: "relative",
                     overflow: "hidden",
                     background:
-                      "linear-gradient(90deg, #0a0a0a 0%, #1a1a1a 12%, #2d2d2d 20%, #353535 25%, #2d2d2d 30%, #1f1f1f 40%, #151515 50%, #1f1f1f 60%, #2d2d2d 70%, #353535 75%, #2d2d2d 80%, #1a1a1a 88%, #0a0a0a 100%)",
-                    boxShadow:
-                      "inset 0 3px 8px rgba(0,0,0,0.85), inset 0 -2px 5px rgba(150,150,150,0.1), inset 0 1px 0 rgba(255,255,255,0.05)",
-                    border: "1px solid #282828",
+                      "linear-gradient(180deg, #0A0806 0%, #1A1510 50%, #0A0806 100%)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "inset 0 3px 8px rgba(0,0,0,0.9)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    padding: "3px 4px",
                   }}
                 >
-                  {/* Dynamic tape shine - follows playback speed */}
-                  {powerOn && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: "-100%",
-                        right: "-100%",
-                        height: "100%",
-                        background:
-                          "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 25%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0.15) 75%, transparent 100%)",
-                        animation: `shine ${0.6 / (mode === "ff" ? 3.5 : 1)}s ease-in-out infinite`,
-                        filter: "blur(1px)",
-                      }}
-                    />
-                  )}
-
-                  {/* Horizontal tape stripes */}
+                  {/* Top scale markings */}
                   <div
                     style={{
-                      position: "absolute",
-                      inset: 0,
-                      backgroundImage:
-                        "repeating-linear-gradient(90deg, rgba(100,100,100,0.15) 0px, rgba(100,100,100,0.15) 2px, rgba(80,80,80,0.1) 2px, rgba(80,80,80,0.1) 4px)",
-                      pointerEvents: "none",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: 6.5,
+                      fontFamily: "monospace",
+                      color: "rgba(255,255,255,0.45)",
+                      letterSpacing: "0.08em",
+                      fontWeight: 700,
                     }}
-                  />
+                  >
+                    <span>100</span>
+                    <span>50</span>
+                    <span>0</span>
+                  </div>
 
-                  {/* Vertical scrolling tape motion lines */}
+                  {/* Tape bridge line */}
                   <div
                     style={{
-                      position: "absolute",
-                      inset: 0,
-                      backgroundImage:
-                        "repeating-linear-gradient(0deg, rgba(120,120,120,0.2) 0px, rgba(120,120,120,0.2) 1px, transparent 1px, transparent 4px)",
-                      animation: powerOn
-                        ? `scrollLines ${0.25 / (mode === "ff" ? 4 : mode === "rewind" ? 4 : 1)}s linear infinite`
-                        : "none",
-                      pointerEvents: "none",
-                    }}
-                  />
-
-                  {/* Top glossy highlight */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: "35%",
+                      height: 18,
                       background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 100%)",
-                      pointerEvents: "none",
-                      borderRadius: "4px 4px 0 0",
+                        "linear-gradient(180deg, #1E1610 0%, #2A1E14 45%, #18100A 100%)",
+                      boxShadow: "inset 0 1px 2px rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.6)",
+                      borderRadius: 1,
+                      position: "relative",
+                      overflow: "hidden",
                     }}
+                  >
+                    {/* Scrolling shine when playing */}
+                    {powerOn && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background:
+                            "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)",
+                          animation: "tapeShine 1.2s ease-in-out infinite",
+                        }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Bottom graduation ticks */}
+                  <div style={{ display: "flex", justifyContent: "space-between", padding: "0 2px" }}>
+                    {Array.from({ length: 9 }).map((_, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          width: 1,
+                          height: i % 4 === 0 ? 4 : 2.5,
+                          background: "rgba(255,255,255,0.3)",
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right Reel Spool (Take-Up) */}
+                <div style={{ position: "relative", zIndex: 2, flexShrink: 0 }}>
+                  <PrecisionReel
+                    angle={rightAngle.current}
+                    fullness={windRef.current}
+                    accentColor={theme.accent}
                   />
-
-                  {/* Center warm glow when playing */}
-                  {powerOn && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          mode === "playing"
-                            ? "radial-gradient(ellipse at center, rgba(255,200,100,0.08) 0%, transparent 70%)"
-                            : "radial-gradient(ellipse at center, rgba(255,150,80,0.06) 0%, transparent 70%)",
-                        pointerEvents: "none",
-                        animation: "pulse 2s ease-in-out infinite",
-                      }}
-                    />
-                  )}
                 </div>
-
-                {/* Right reel */}
-                <div style={{ position: "relative", zIndex: 3 }}>
-                  {isHydrated && <Reel angle={rightAngle.current} fullness={windRef.current} />}
-                  {!isHydrated && <Reel angle={0} fullness={0.32} />}
-                </div>
-
-                {/* Overall window gloss */}
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    borderRadius: 4,
-                    background:
-                      "linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.05) 100%)",
-                    pointerEvents: "none",
-                  }}
-                />
               </div>
-
-              {/* Keyframe animations */}
-              <style>{`
-                @keyframes shine {
-                  0% { left: -100%; }
-                  100% { left: 100%; }
-                }
-                @keyframes scrollLines {
-                  0% { transform: translateY(0); }
-                  100% { transform: translateY(4px); }
-                }
-                @keyframes pulse {
-                  0%, 100% { opacity: 0.4; }
-                  50% { opacity: 1; }
-                }
-              `}</style>
             </div>
 
-            {/* Bottom brand stripe */}
+            {/* ── LOWER SPEC LABEL BAR ────────────────────────────────────── */}
             <div
               style={{
-                margin: "7px 18px 0",
-                background:
-                  "linear-gradient(90deg,#e8dcb0 0%, #d8c99a 55%, #b9c0c2 78%, #e9edee 100%)",
-                borderRadius: 2,
-                padding: "5px 8px",
+                margin: "8px 14px 0",
+                background: theme.labelBg,
+                borderRadius: 3,
+                padding: "4px 8px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                boxShadow: "0 1.5px 4px rgba(0,0,0,0.4)",
+                fontSize: 8.5,
+                fontWeight: 700,
+                color: theme.text,
+                letterSpacing: "0.08em",
+                border: "1px solid rgba(0,0,0,0.06)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
               }}
             >
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "#2a2214",
-                  letterSpacing: 0.5,
-                }}
-              >
-                ◆ TDK
+              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <span style={{ color: theme.accent }}>◆</span> TDK
               </span>
-              <span style={{ fontSize: 8.5, color: "#3a3220", fontWeight: 500 }}>
-                High Bias 70μs
+              <span style={{ color: "#8E8E93", fontSize: 7.5 }}>
+                High Bias 70µs · Type II
               </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#4a7a3a" }}>
+              <span style={{ color: "#2E7D32", fontWeight: 800 }}>
                 90
               </span>
             </div>
 
-            {/* Write-protect tabs */}
+            {/* ── BOTTOM TRAPEZOID CHIN / CONTROLS ────────────────────────── */}
             <div
               style={{
+                marginTop: 8,
+                padding: "0 4px",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                margin: "6px 26px 0",
-                padding: "0 2px",
               }}
             >
-              <Tab />
-              <Tab />
-              <Screw small style={{ position: "relative" }} />
-              <Tab />
-              <Tab />
-            </div>
-
-            {/* Control deck — compact */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 4px 1px" }}>
-              {/* Power LED */}
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 2,
-                  marginRight: 1,
-                }}
-              >
+              {/* Power LED & 3-Digit Mechanical Tape Counter */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div
-                  title="Power"
                   style={{
-                    width: 8,
-                    height: 8,
+                    width: 7,
+                    height: 7,
                     borderRadius: "50%",
-                    background: powerOn
-                      ? "radial-gradient(circle at 35% 30%, #ffe29a, #ff9d1f 70%)"
-                      : "radial-gradient(circle at 35% 30%, #5a5650, #302d28 70%)",
-                    boxShadow: powerOn
-                      ? "0 0 6px 1.5px rgba(255,157,31,0.65)"
-                      : "inset 0 1px 2px rgba(0,0,0,0.5)",
-                    transition: "all 150ms ease",
+                    background: powerOn ? "#FF9800" : "#554433",
+                    boxShadow: powerOn ? "0 0 8px #FF9800, 0 0 3px #FFA726" : "none",
+                    transition: "all 0.2s ease",
                   }}
+                  title={powerOn ? "Tape Running" : "Standby"}
                 />
-                <span style={{ fontSize: 7, letterSpacing: 0.8, color: "#8a8478" }}>
-                  PWR
-                </span>
+                <div
+                  style={{
+                    background: "#080706",
+                    border: "1.5px solid #1E1A16",
+                    borderRadius: 4,
+                    padding: "2px 6px",
+                    fontSize: 11,
+                    fontFamily: "'Courier New', monospace",
+                    fontWeight: 800,
+                    color: "#FFB74D",
+                    letterSpacing: "0.18em",
+                    boxShadow: "inset 0 2px 4px rgba(0,0,0,0.8)",
+                  }}
+                >
+                  {String(counter).padStart(3, "0")}
+                </div>
               </div>
 
-              {/* Tape counter */}
-              <div
-                style={{
-                  background: "linear-gradient(180deg,#0c0c0c,#000)",
-                  color: "#d8cf9e",
-                  fontFamily: "'Oswald', monospace",
-                  fontSize: 13,
-                  letterSpacing: 3,
-                  padding: "4px 7px",
-                  borderRadius: 3,
-                  minWidth: 50,
-                  textAlign: "center",
-                  boxShadow: "inset 0 2px 4px rgba(0,0,0,0.9)",
-                }}
-              >
-                {String(counter).padStart(3, "0")}
-              </div>
-
-              <div style={{ flex: 1 }} />
-
-              {/* Flip button */}
+              {/* Flip Tape Button */}
               {showFlipButton && (
                 <button
                   onClick={handleFlip}
-                  aria-label="Flip cassette to other side"
+                  className="transition-all active:scale-95 cursor-pointer"
                   style={{
-                    background: "linear-gradient(180deg,#f7f0dc,#e6d9b8)",
-                    border: "1px solid #9c8a5c",
-                    borderRadius: 999,
-                    padding: "4px 10px",
+                    background: "#F5EFE4",
+                    border: "1px solid #D8CFC0",
+                    borderRadius: 16,
+                    padding: "4px 12px",
                     display: "flex",
                     alignItems: "center",
                     gap: 4,
                     fontSize: 10,
-                    fontWeight: 600,
-                    color: "#3a3220",
-                    cursor: "pointer",
-                    boxShadow:
-                      "0 1.5px 0 rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.7)",
-                    transition: "transform 100ms ease",
-                    minHeight: "36px",
-                    touchAction: "manipulation",
+                    fontWeight: 700,
+                    color: "#2C2620",
+                    boxShadow: "0 2px 5px rgba(0,0,0,0.25), inset 0 1px 0 #FFFFFF",
                   }}
-                  onMouseDown={(e) => (e.currentTarget.style.transform = "translateY(1px)")}
-                  onMouseUp={(e) => (e.currentTarget.style.transform = "translateY(0)")}
                 >
-                  <span style={{ fontSize: 12 }}>↻</span> Flip
+                  <span>↻ Flip</span>
+                  <span style={{ fontSize: 8, color: "#8E8E93" }}>Side {side === "A" ? "B" : "A"}</span>
                 </button>
               )}
-
-              {/* Control buttons */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, flex: 2 }}>
-                <DeckButton label="RW" active={localMode === "rewind"} onClick={handleRewindClick}>
-                  ⏮
-                </DeckButton>
-                <DeckButton label="▶ Play" onClick={handlePlayClick} active={localMode === "playing"}>
-                  ⏯
-                </DeckButton>
-                <DeckButton label="FF" active={localMode === "ff"} onClick={handleFFClick}>
-                  ⏭
-                </DeckButton>
-                <DeckButton label="Stop" onClick={handleStopClick}>
-                  ⏹
-                </DeckButton>
-              </div>
-            </div>
-
-            <div
-              style={{
-                textAlign: "center",
-                fontSize: 7,
-                letterSpacing: 0.8,
-                color: "#8a8478",
-                marginTop: 0,
-                paddingBottom: 1,
-              }}
-            >
-              COUNTER
             </div>
           </div>
         </div>
@@ -635,213 +569,152 @@ export default function CassetteObject({
   );
 }
 
-function DeckButton({
-  children,
-  label,
-  active = false,
-  onClick,
+/* ─── 100% MATHEMATICALLY CENTERED PRECISION CASSETTE REEL ───────────────── */
+function PrecisionReel({
+  angle,
+  fullness,
+  accentColor = "#D4882A",
 }: {
-  children: React.ReactNode;
-  label: string;
-  active?: boolean;
-  onClick: () => void;
+  angle: number;
+  fullness: number;
+  accentColor?: string;
 }) {
-  const [pressed, setPressed] = useState(false);
+  // Center is locked at (34, 34) in a 68x68 SVG viewBox
+  const cx = 34;
+  const cy = 34;
+
+  // Tape spool radius scales smoothly with fullness
+  const tapeRadius = 15 + fullness * 16; // from 15px (empty) to 31px (full)
 
   return (
-    <div
-      role="button"
-      aria-label={label}
-      onClick={onClick}
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-      onMouseLeave={() => setPressed(false)}
-      onTouchStart={() => setPressed(true)}
-      onTouchEnd={() => setPressed(false)}
-      style={{
-        height: 30,
-        borderRadius: 6,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: 12,
-        cursor: "pointer",
-        userSelect: "none",
-        color: active ? "#f0e9c9" : "#c9c3b3",
-        background: active
-          ? "linear-gradient(180deg,#4a4020,#2a2410)"
-          : "linear-gradient(180deg,#2e2e2e,#181818)",
-        border: "1px solid #3a3a3a",
-        boxShadow: pressed
-          ? "inset 0 2px 4px rgba(0,0,0,0.6)"
-          : active
-          ? "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.08)"
-          : "0 1.5px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
-        transition: "all 90ms ease",
-        minHeight: "36px",
-        touchAction: "manipulation",
-      }}
+    <svg
+      width="68"
+      height="68"
+      viewBox="0 0 68 68"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ display: "block" }}
     >
-      {children}
-    </div>
+      <defs>
+        {/* Dark Magnetic Tape Gradient */}
+        <radialGradient id="magneticTape" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#120E0A" />
+          <stop offset="60%" stopColor="#1E1610" />
+          <stop offset="90%" stopColor="#281E16" />
+          <stop offset="100%" stopColor="#120C08" />
+        </radialGradient>
+
+        {/* Ivory White Hub Gradient (Centered) */}
+        <radialGradient id="ivoryHub" cx="42%" cy="40%" r="55%">
+          <stop offset="0%" stopColor="#FFFFFF" />
+          <stop offset="55%" stopColor="#F5EFE0" />
+          <stop offset="85%" stopColor="#D8CFBF" />
+          <stop offset="100%" stopColor="#B0A694" />
+        </radialGradient>
+
+        {/* Center Hole Shadow */}
+        <radialGradient id="holeShadow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#080706" />
+          <stop offset="100%" stopColor="#181410" />
+        </radialGradient>
+      </defs>
+
+      {/* 1. Magnetic Tape Outer Spool Coil */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={tapeRadius}
+        fill="url(#magneticTape)"
+        stroke="#0A0806"
+        strokeWidth="0.8"
+      />
+
+      {/* Tape Coil Micro-groove Rings */}
+      {fullness > 0.2 && (
+        <>
+          <circle cx={cx} cy={cy} r={tapeRadius - 2} fill="none" stroke="#2C2016" strokeWidth="0.5" opacity="0.6" />
+          <circle cx={cx} cy={cy} r={tapeRadius - 5} fill="none" stroke="#2C2016" strokeWidth="0.5" opacity="0.5" />
+          <circle cx={cx} cy={cy} r={tapeRadius - 8} fill="none" stroke="#2C2016" strokeWidth="0.5" opacity="0.4" />
+        </>
+      )}
+
+      {/* 2. Ivory White Cog Hub Base */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r="15"
+        fill="url(#ivoryHub)"
+        stroke="#9E9484"
+        strokeWidth="0.6"
+      />
+      <circle cx={cx} cy={cy} r="13.5" fill="none" stroke="#FFFFFF" strokeWidth="0.5" opacity="0.8" />
+
+      {/* 3. Center Spindle Drive Hole */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r="7.5"
+        fill="url(#holeShadow)"
+        stroke="#5A5040"
+        strokeWidth="0.8"
+      />
+
+      {/* 4. Six Precision Drive Teeth (Rotating centered at cx, cy) */}
+      <g transform={`rotate(${angle} ${cx} ${cy})`}>
+        {[0, 60, 120, 180, 240, 300].map((toothAngle) => {
+          const rad = (toothAngle * Math.PI) / 180;
+          const x1 = +(cx + Math.cos(rad) * 6.5).toFixed(2);
+          const y1 = +(cy + Math.sin(rad) * 6.5).toFixed(2);
+          const x2 = +(cx + Math.cos(rad) * 14.5).toFixed(2);
+          const y2 = +(cy + Math.sin(rad) * 14.5).toFixed(2);
+
+          return (
+            <line
+              key={toothAngle}
+              x1={x1}
+              y1={y1}
+              x2={x2}
+              y2={y2}
+              stroke="#2A241E"
+              strokeWidth="2.8"
+              strokeLinecap="round"
+            />
+          );
+        })}
+
+        {/* Center Axle Dot */}
+        <circle cx={cx} cy={cy} r="2.8" fill="#080706" />
+      </g>
+    </svg>
   );
 }
 
-function Screw({ style, small }: { style?: React.CSSProperties; small?: boolean }) {
-  const s = small ? 11 : 15;
+function Screw({ style }: { style?: React.CSSProperties }) {
   return (
     <div
       style={{
-        width: s,
-        height: s,
+        width: 12,
+        height: 12,
         borderRadius: "50%",
-        background: "radial-gradient(circle at 32% 30%, #f2e8cd, #a2915f 55%, #6e5f3a)",
-        border: "1px solid #5c4f30",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.4), inset 0 -1px 1px rgba(0,0,0,0.3)",
+        background: "radial-gradient(circle at 35% 32%, #EAE4D2, #A89C80 60%, #685E48)",
+        border: "1px solid #483E28",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.5), inset 0 -1px 1px rgba(0,0,0,0.3)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        position: "relative",
         ...style,
       }}
     >
-      <div style={{ width: s * 0.6, height: 1.2, background: "#5c4f30", position: "absolute" }} />
+      <div style={{ width: 7, height: 1.2, background: "#3A301E", position: "absolute" }} />
       <div
         style={{
-          width: s * 0.6,
+          width: 7,
           height: 1.2,
-          background: "#5c4f30",
+          background: "#3A301E",
           position: "absolute",
           transform: "rotate(90deg)",
         }}
       />
     </div>
-  );
-}
-
-function Tab() {
-  return (
-    <div
-      style={{
-        width: 20,
-        height: 12,
-        borderRadius: "2px 2px 0 0",
-        background: "linear-gradient(180deg,#d8d4c8,#a8a498)",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.4)",
-      }}
-    />
-  );
-}
-
-function Reel({ angle, fullness }: { angle: number; fullness: number }) {
-  const tapeOuterR = 8 + fullness * 12;
-
-  return (
-    <div
-      style={{
-        width: 58,
-        height: 58,
-        borderRadius: "50%",
-        background: "radial-gradient(circle at 35% 35%, #e8e4d8 0%, #d4cfc0 20%, #c0b8a8 28%, #1a1a1a 32%)",
-        boxShadow:
-          "inset 0 0 0 2.5px #0a0a0a, inset 0 4px 10px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0,0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-      }}
-    >
-      <div style={{ width: 46, height: 46, borderRadius: "50%", position: "relative" }}>
-        {/* Tape winding visualization */}
-        <div
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            width: tapeOuterR * 2,
-            height: tapeOuterR * 2,
-            borderRadius: "50%",
-            transform: "translate(-50%,-50%)",
-            background:
-              "repeating-conic-gradient(from 0deg, #0a0a0a 0deg 6deg, #1a1812 6deg 8deg)",
-            boxShadow: "inset 0 0 8px rgba(0,0,0,0.9), inset 0 2px 4px rgba(0,0,0,0.7)",
-          }}
-        />
-
-        {/* Rotating hub with spokes */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            transform: `rotate(${angle}deg)`,
-          }}
-        >
-          {/* Hub center - metallic */}
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              width: 22,
-              height: 22,
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle at 35% 35%, #f0ead8 0%, #d8cfc0 40%, #b0a890 70%, #8a7868 100%)",
-              transform: "translate(-50%,-50%)",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.6), inset 0 1px 2px rgba(255,255,255,0.2)",
-            }}
-          />
-
-          {/* Prominent spokes - 8 for better visual effect */}
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                width: 16,
-                height: 5,
-                background: "linear-gradient(180deg, #2a2420 0%, #0a0a0a 50%, #000 100%)",
-                borderRadius: 2.5,
-                transform: `translate(-50%,-50%) rotate(${i * 45}deg) translateX(12px)`,
-                boxShadow: "0 1px 2px rgba(0,0,0,0.8)",
-              }}
-            />
-          ))}
-
-          {/* Center spindle */}
-          <div
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              background: "radial-gradient(circle at 30% 30%, #1a1a1a, #000)",
-              transform: "translate(-50%,-50%)",
-              boxShadow: "inset 0 1px 2px rgba(255,255,255,0.08)",
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TapeGleam({ active }: { active: boolean }) {
-  return (
-    <div
-      style={{
-        width: 22,
-        height: 38,
-        borderRadius: 2,
-        background: active
-          ? "linear-gradient(115deg, #1a1a1a 0%, #3a3a3a 30%, #d8d4c8 48%, #3a3a3a 65%, #1a1a1a 100%)"
-          : "linear-gradient(115deg, #141414 0%, #1e1e1e 45%, #3a3a3a 55%, #1e1e1e 100%)",
-        boxShadow: "inset 0 0 3px rgba(0,0,0,0.6)",
-        transition: "background 250ms ease",
-      }}
-    />
   );
 }

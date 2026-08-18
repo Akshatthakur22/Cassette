@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getTapeByPublicId } from "@/app/actions/tape";
+import { ImagePreloader } from "@/app/components/ImagePreloader";
 import TapeViewClient from "@/app/components/TapeViewClient";
+import { getStableImageNumber } from "@/app/lib/accessibility";
 
 // Opt out of static optimization for this dynamic route
 export const dynamic = 'force-dynamic';
@@ -157,8 +159,19 @@ export default async function TapePage({ params }: Props) {
       }))
     };
 
+    const backgroundImageNumber = getStableImageNumber(publicId, 20);
+    const preloadImages = [
+      { src: `/images/optimized/${backgroundImageNumber}.png`, format: "png" as const },
+      { src: "/images/optimized/14.png", format: "png" as const },
+    ];
+
     console.log(`[TapePage] Rendering TapeViewClient`);
-    return <TapeViewClient tape={serializedTape as any} />;
+    return (
+      <>
+        <ImagePreloader images={preloadImages} />
+        <TapeViewClient tape={serializedTape as any} />
+      </>
+    );
   } catch (error) {
     console.error(`[TapePage] Fatal error:`, error);
     return (

@@ -262,37 +262,6 @@ export default function RecordingSequence({
                       filter: recOn ? "drop-shadow(0 0 12px rgba(212,136,42,0.4))" : "drop-shadow(0 2px 8px rgba(0,0,0,0.1))",
                     }}
                   >
-                    {/* Tape layers buildup - more visible and dynamic */}
-                    {phase === "recording" && Array.from({ length: Math.min(tapeLayers, 8) }).map((_, layer) => (
-                      <g key={`tape-${layer}`}>
-                        <circle
-                          cx="36"
-                          cy="36"
-                          r={24 + layer * 3}
-                          fill="none"
-                          stroke="#D4A76A"
-                          strokeWidth={0.6 + layer * 0.15}
-                          opacity={Math.max(0.2, 0.6 - layer * 0.08)}
-                          style={{
-                            filter: `drop-shadow(0 0 ${2 + layer}px rgba(212,136,42,0.3))`,
-                          }}
-                        />
-                        {/* Tape texture lines */}
-                        {layer % 2 === 0 && (
-                          <circle
-                            cx="36"
-                            cy="36"
-                            r={24 + layer * 3 - 0.5}
-                            fill="none"
-                            stroke="#C89850"
-                            strokeWidth={0.3}
-                            opacity={0.4}
-                            strokeDasharray="2,1"
-                          />
-                        )}
-                      </g>
-                    ))}
-
                     {/* Main SVG reel */}
                     <svg viewBox="0 0 72 72" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
                       {/* Outer ring - metallic shine */}
@@ -310,6 +279,37 @@ export default function RecordingSequence({
                           </feMerge>
                         </filter>
                       </defs>
+
+                      {/* Tape layers buildup - inside SVG */}
+                      {phase === "recording" && Array.from({ length: Math.min(tapeLayers, 8) }).map((_, layer) => (
+                        <g key={`tape-${layer}`}>
+                          <circle
+                            cx="36"
+                            cy="36"
+                            r={24 + layer * 3}
+                            fill="none"
+                            stroke="#D4A76A"
+                            strokeWidth={0.6 + layer * 0.15}
+                            opacity={Math.max(0.2, 0.6 - layer * 0.08)}
+                            style={{
+                              filter: `drop-shadow(0 0 ${2 + layer}px rgba(212,136,42,0.3))`,
+                            }}
+                          />
+                          {/* Tape texture lines */}
+                          {layer % 2 === 0 && (
+                            <circle
+                              cx="36"
+                              cy="36"
+                              r={24 + layer * 3 - 0.5}
+                              fill="none"
+                              stroke="#C89850"
+                              strokeWidth={0.3}
+                              opacity={0.4}
+                              strokeDasharray="2,1"
+                            />
+                          )}
+                        </g>
+                      ))}
 
                       {/* Base reel - more dimensional */}
                       <circle cx="36" cy="36" r="34" fill={`url(#reelGradient${i})`} stroke="#6A4820" strokeWidth="1.5" filter={`url(#glow${i})`} />

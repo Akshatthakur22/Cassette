@@ -8,6 +8,7 @@ export interface YoutubeSearchResult {
   title: string;
   channelTitle: string;
   thumbnail?: string;
+  thumbnailUrl?: string;
   durationSec?: number;
 }
 
@@ -17,9 +18,28 @@ interface YoutubeSearchBarProps {
   type?: "song" | "playlist";
 }
 
+/** Helper to extract YouTube video ID if user pastes a URL directly */
+function extractYoutubeVideoId(input: string): string | null {
+  if (!input) return null;
+  if (/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) return input.trim();
+  try {
+    const url = new URL(input.trim());
+    if (url.hostname.includes("youtube.com") && url.searchParams.has("v")) {
+      return url.searchParams.get("v");
+    }
+    if (url.hostname.includes("youtube.com") && url.pathname.startsWith("/shorts/")) {
+      return url.pathname.replace("/shorts/", "").split("?")[0];
+    }
+    if (url.hostname === "youtu.be") {
+      return url.pathname.slice(1).split("?")[0];
+    }
+  } catch {}
+  return null;
+}
+
 export function YoutubeSearchBar({
   onSelectResult,
-  placeholder = "Search songs or artists...",
+  placeholder = "Search songs, artists, or paste YouTube link...",
   type = "song",
 }: YoutubeSearchBarProps) {
   const [query, setQuery] = useState("");
@@ -31,49 +51,46 @@ export function YoutubeSearchBar({
   const [isPending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounced search with real-time feedback
+  // Debounced search
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    if (!query.trim()) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       setResults([]);
       setSelectedIndex(0);
       return;
     }
 
     setIsSearching(true);
-    // Increased debounce time for better UX (users see "searching..." state)
+
     searchTimeoutRef.current = setTimeout(() => {
       startTransition(async () => {
         try {
+          // If query is a pasted YouTube URL, extract videoId
+          const extractedId = extractYoutubeVideoId(trimmed);
           const endpoint =
             type === "song"
-              ? `/api/search-enhanced?title=${encodeURIComponent(query.trim())}&cache=true`
-              : `/api/youtube/playlists/search?q=${encodeURIComponent(query.trim())}`;
+              ? `/api/search?title=${encodeURIComponent(extractedId || trimmed)}`
+              : `/api/youtube/playlists/search?q=${encodeURIComponent(trimmed)}`;
 
           const response = await fetch(endpoint);
           if (!response.ok) {
-            console.error(`Search request failed with status ${response.status}`);
             throw new Error(`Search failed: ${response.status}`);
           }
 
           const data = await response.json();
 
-          // Check for API errors in response body
-          if (data.error) {
-            console.warn("Search API returned error:", data.error, data.message);
-          }
-
           if (type === "song") {
             const songResults = (data.results || []).slice(0, 10).map((r: any) => ({
               videoId: r.videoId,
               title: r.title,
-              channelTitle: r.channelTitle,
+              channelTitle: r.channelTitle || "YouTube",
               thumbnail: r.thumbnailUrl,
+              thumbnailUrl: r.thumbnailUrl,
               durationSec: r.durationSec,
-              cached: r.cached,
             }));
             setResults(songResults);
           } else {
@@ -82,6 +99,7 @@ export function YoutubeSearchBar({
               title: p.title,
               channelTitle: p.channelTitle || "YouTube",
               thumbnail: p.thumbnail,
+              thumbnailUrl: p.thumbnail,
               durationSec: p.itemCount,
             }));
             setResults(playlistResults);
@@ -89,14 +107,13 @@ export function YoutubeSearchBar({
 
           setSelectedIndex(0);
         } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : String(error);
-          console.error("Search error:", errorMsg, { query, type });
+          console.error("Search error:", error);
           setResults([]);
         } finally {
           setIsSearching(false);
         }
       });
-    }, 400); // Increased debounce for smoother feel (was 300ms)
+    }, 350);
 
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
@@ -134,7 +151,6 @@ export function YoutubeSearchBar({
     onSelectResult(result);
     setQuery("");
     setResults([]);
-    inputRef.current?.focus();
   }
 
   function handleClear() {
@@ -164,7 +180,7 @@ export function YoutubeSearchBar({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsFocused(true)}
-          onBlur={() => setTimeout(() => setIsFocused(false), 150)}
+          onBlur={() => setTimeout(() => setIsFocused(false), 200)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className="flex-1 px-3 py-3 sm:py-3.5 text-sm sm:text-base outline-none bg-transparent"
@@ -176,6 +192,7 @@ export function YoutubeSearchBar({
         <AnimatePresence>
           {query && (
             <motion.button
+              type="button"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.8 }}
@@ -191,7 +208,6 @@ export function YoutubeSearchBar({
                 justifyContent: "center",
               }}
               aria-label="Clear search"
-              title="Clear search"
             >
               ✕
             </motion.button>
@@ -205,7 +221,7 @@ export function YoutubeSearchBar({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="pr-3.5 text-xs"
+              className="pr-3.5 text-xs animate-spin"
               style={{ color: "#D4882A" }}
             >
               ⟳
@@ -216,7 +232,7 @@ export function YoutubeSearchBar({
 
       {/* Results Dropdown */}
       <AnimatePresence>
-        {isFocused && results.length > 0 && (
+        {isFocused && (results.length > 0 || (query && !isSearching)) && (
           <motion.div
             initial={{ opacity: 0, y: -8, scaleY: 0.95 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
@@ -232,20 +248,24 @@ export function YoutubeSearchBar({
             }}
           >
             {results.map((result, idx) => (
-              <motion.button
+              <button
                 key={result.videoId}
-                onClick={() => handleSelectResult(result)}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Prevent blur
+                  handleSelectResult(result);
+                }}
                 onMouseEnter={() => setSelectedIndex(idx)}
-                className="w-full text-left px-3 sm:px-4 py-3 border-b last:border-b-0 transition-colors flex gap-3 hover:no-underline"
+                className="w-full text-left px-3 sm:px-4 py-3 border-b last:border-b-0 transition-colors flex items-center gap-3"
                 style={{
                   background: selectedIndex === idx ? "#F3EFE7" : "#FFFFFF",
                   borderColor: "#F0EDE7",
                 }}
               >
                 {/* Thumbnail */}
-                {result.thumbnail && (
+                {(result.thumbnail || result.thumbnailUrl) && (
                   <img
-                    src={result.thumbnail}
+                    src={result.thumbnail || result.thumbnailUrl}
                     alt={result.title}
                     className="w-12 h-9 rounded object-cover flex-shrink-0"
                     loading="lazy"
@@ -254,16 +274,10 @@ export function YoutubeSearchBar({
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                  <p
-                    className="text-sm font-medium truncate"
-                    style={{ color: "#1D1D1F" }}
-                  >
+                  <p className="text-sm font-medium truncate" style={{ color: "#1D1D1F" }}>
                     {result.title}
                   </p>
-                  <p
-                    className="text-xs truncate mt-0.5"
-                    style={{ color: "#8E8E93" }}
-                  >
+                  <p className="text-xs truncate mt-0.5" style={{ color: "#8E8E93" }}>
                     {result.channelTitle}
                     {result.durationSec && type === "song"
                       ? ` · ${formatDuration(result.durationSec)}`
@@ -273,42 +287,26 @@ export function YoutubeSearchBar({
                   </p>
                 </div>
 
-                {/* Keyboard hint for first item */}
-                {idx === selectedIndex && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-xs flex-shrink-0"
-                    style={{ color: "#D4882A" }}
-                  >
-                    ↵
-                  </motion.span>
-                )}
-              </motion.button>
+                <span className="text-xs font-semibold px-2 py-1 rounded bg-[#D4882A] text-white flex-shrink-0">
+                  + Add
+                </span>
+              </button>
             ))}
 
-            {/* Empty state with tip */}
+            {/* Empty state with intelligent tip */}
             {results.length === 0 && query && !isSearching && (
-              <div className="p-4 text-center" style={{ color: "#8E8E93" }}>
-                <p className="text-sm">No results found</p>
-                <p className="text-xs mt-1">Try a different search</p>
+              <div className="p-5 text-center" style={{ color: "#8E8E93" }}>
+                <p className="text-sm font-medium text-[#1D1D1F]">
+                  No tracks found for &ldquo;{query}&rdquo;
+                </p>
+                <p className="text-xs mt-1.5 leading-relaxed max-w-xs mx-auto">
+                  💡 Tip: Try searching with just the song title, the artist name alone, or paste a direct YouTube video link.
+                </p>
               </div>
             )}
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Helper text */}
-      {isFocused && query.length === 0 && results.length === 0 && !isSearching && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-xs mt-2"
-          style={{ color: "#A09A8A" }}
-        >
-          Start typing to search • Use ↑↓ to navigate • Enter to select • Esc to close
-        </motion.p>
-      )}
     </div>
   );
 }

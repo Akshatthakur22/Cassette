@@ -25,6 +25,8 @@ export default async function RecordSuccessPage({
     <SendTapeClient
       publicId={publicId}
       tapeId={tape.id}
+      draftToken={tape.draftToken}
+      visibility={tape.visibility === "public" ? "public" : "unlisted"}
       title={tape.title ?? "Untitled Tape"}
       senderName={tape.senderName}
       recipientName={tape.recipientName ?? "Someone"}

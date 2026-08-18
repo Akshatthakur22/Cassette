@@ -13,14 +13,17 @@ import { PosterImage } from "./PosterImage";
 import { BackgroundImage } from "./BackgroundImage";
 import { PlaylistMetadataSection } from "./PlaylistMetadataSection";
 import { PlaylistMetadataBadge } from "./PlaylistMetadataBadge";
+import { AccessibleTapeView } from "./AccessibleTapeView";
 import { recordView } from "@/app/actions/tape";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 import { playClickSound, playFlipSound } from "@/app/lib/sounds";
 import { trackPlaylistView } from "@/app/lib/playlist-metadata";
-import { getStableImageNumber } from "@/app/lib/accessibility";
 import type { TapeWithTracks, TrackRow } from "@/app/lib/types";
 import { formatDuration } from "@/app/lib/fake-data";
 import { useReduceMotion } from "@/app/lib/use-reduce-motion";
+import { useWakeLock } from "@/app/lib/useWakeLock";
+import { useMediaSession } from "@/app/lib/useMediaSession";
+import { getStableImageNumber } from "@/app/lib/accessibility";
 
 interface Props {
   tape: TapeWithTracks;
@@ -88,8 +91,31 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
   const [showFlipRitual, setShowFlipRitual] = useState(false); // physical flip animation
   const [flipPhase, setFlipPhase] = useState<"ejecting" | "flipped" | "inserting" | "done">("ejecting");
   const [showMakeOne, setShowMakeOne] = useState(false);
-  const [showDedication, setShowDedication] = useState(false);
+  const [showDedication, setShowDedication] = useState(true);
   const [hasError, setHasError] = useState(false);
+
+  // Restore gate state from sessionStorage on mount (skip gate on refresh)
+  useEffect(() => {
+    if (isPreview) {
+      setInserted(true);
+      return;
+    }
+    try {
+      const stored = sessionStorage.getItem(`tape_opened_${tape.publicId || tape.id}`);
+      if (stored === "true") {
+        setOpened(true);
+        setInserted(true);
+      }
+    } catch {}
+  }, [isPreview, tape.publicId, tape.id]);
+
+  const handleGateOpen = useCallback(() => {
+    setOpened(true);
+    setInserted(true);
+    try {
+      sessionStorage.setItem(`tape_opened_${tape.publicId || tape.id}`, "true");
+    } catch {}
+  }, [tape.publicId, tape.id]);
 
   // Record view on mount
   useEffect(() => {
@@ -117,6 +143,13 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
   }, []);
 
   const tracks = (tape.tracks as TrackRow[]) ?? [];
+  const accessibleTracks = tracks.map((track) => ({
+    id: track.id,
+    title: track.title,
+    artist: track.artist ?? "Unknown",
+    note: track.personalNote ?? undefined,
+    duration: track.durationSec ?? undefined,
+  }));
   const currentTrack = tracks[currentIndex];
   const accentColor = ACCENT_BY_STYLE[tape.style ?? "cream"] ?? "#D4882A";
 
@@ -148,10 +181,50 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     artist: t.artist ?? "Unknown",
     thumbnailUrl: t.thumbnailUrl ?? "",
     provider: (t.provider ?? "youtube") as "youtube" | "voice",
-    providerTrackId: extractVideoId(t.providerTrackId),
+    providerTrackId: t.provider === "voice" ? t.providerTrackId : extractVideoId(t.providerTrackId),
     personalNote: t.personalNote ?? undefined,
-    durationSec: t.durationSec ?? 240,
+    durationSec: t.durationSec ?? 0,
   }));
+
+  const [interruptedByBackground, setInterruptedByBackground] = useState(false);
+
+  // Screen Wake Lock — keeps screen active during quiet listening
+  useWakeLock(isPlaying);
+
+  // Media Session API — lock screen controls and notification artwork
+  useMediaSession(
+    currentTrack
+      ? {
+          title: currentTrack.title,
+          artist: currentTrack.artist,
+          album: tape.title || "CASSETTE Mixtape",
+          artworkUrl: currentTrack.thumbnailUrl,
+        }
+      : null,
+    {
+      isPlaying,
+      onPlay: () => {
+        setIsPlaying(true);
+        setInterruptedByBackground(false);
+      },
+      onPause: () => setIsPlaying(false),
+      onPrevious: () => handlePrev(),
+      onNext: () => handleNext(),
+    }
+  );
+
+  // Detect if audio paused due to mobile screen lock or tab backgrounding
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (isPlaying) {
+          setInterruptedByBackground(true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => window.removeEventListener("visibilitychange", handleVisibility);
+  }, [isPlaying]);
 
   const handleNext = useCallback(() => {
     setProgress(0);
@@ -163,12 +236,12 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
         if (tracks[prev].side === "A" && nextSide === "B") {
           setIsPlaying(false);
           setSideADone(true);
-          return prev; // stay on last A track until user flips
+          return prev;
         }
         setSide(nextSide);
         return next;
       }
-      // Tape is done
+      // Reached the very end
       setIsPlaying(false);
       setTapeDone(true);
       return prev;
@@ -310,7 +383,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
             senderName={tape.senderName}
             recipientName={tape.recipientName ?? "You"}
             style={(tape.style ?? "cream") as any}
-            onOpen={() => setOpened(true)}
+            onOpen={handleGateOpen}
           />
         )}
       </AnimatePresence>
@@ -387,19 +460,30 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
             className="fixed inset-0 z-50 flex items-center justify-center"
             style={{ background: "rgba(251,250,247,0.98)" }}
           >
-            <div className="text-center">
+            <div className="text-center max-w-sm w-full px-6 flex flex-col items-center">
               <motion.div
                 animate={
                   reduceMotion ? {} :
-                  flipPhase === "ejecting" ? { y: [0, -30], scale: [1, 1.05] } :
-                  flipPhase === "flipped" ? { rotateY: 180, scale: 1.05 } :
-                  flipPhase === "inserting" ? { y: [-30, 0], rotateY: 180, scale: [1.05, 1] } :
+                  flipPhase === "ejecting" ? { y: [0, -36], scale: [1, 1.04] } :
+                  flipPhase === "flipped" ? { rotateY: 180, scale: 1.04 } :
+                  flipPhase === "inserting" ? { y: [-36, 0], rotateY: 180, scale: [1.04, 1] } :
                   { rotateY: 180 }
                 }
-                transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-                style={{ perspective: 600 }}
+                transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                style={{ perspective: 900, transformStyle: "preserve-3d" }}
+                className="w-full"
               >
-                <div className="text-7xl" role="img" aria-label="cassette being flipped">📼</div>
+                <CassetteObject
+                  side={flipPhase === "ejecting" ? "A" : "B"}
+                  isPlaying={false}
+                  title={tape.title ?? "Untitled Tape"}
+                  recipientName={tape.recipientName ?? "You"}
+                  senderName={tape.senderName}
+                  style={(tape.style ?? "cream") as TapeColorKey}
+                  showFlipButton={false}
+                  progress={0}
+                  cassetteState="flipping"
+                />
               </motion.div>
 
               <motion.p
@@ -407,13 +491,13 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="mt-6 text-sm"
-                style={{ color: "#8E8E93", fontFamily: "monospace", letterSpacing: "0.15em" }}
+                className="mt-6 text-xs sm:text-sm font-semibold"
+                style={{ color: "#D4882A", fontFamily: "monospace", letterSpacing: "0.15em" }}
               >
-                {flipPhase === "ejecting" && "Ejecting..."}
-                {flipPhase === "flipped" && "Flipping..."}
-                {flipPhase === "inserting" && "Inserting Side B..."}
-                {flipPhase === "done" && "Side B →"}
+                {flipPhase === "ejecting" && "⏏ Ejecting Side A..."}
+                {flipPhase === "flipped" && "↻ Flipping to Side B..."}
+                {flipPhase === "inserting" && "▶ Seating Side B into deck..."}
+                {flipPhase === "done" && "✓ Ready for Side B"}
               </motion.p>
             </div>
           </motion.div>
@@ -490,7 +574,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
       </AnimatePresence>
 
       {/* ── MAIN CONTENT — responsive layout ── */}
-      <div className="flex flex-col items-center pb-28 sm:pb-36 md:pb-44 min-h-screen px-3 sm:px-4 md:px-6">
+      <div className="flex flex-col items-center pb-36 sm:pb-44 md:pb-48 min-h-screen px-3 sm:px-4 md:px-6">
 
         {/* Header — responsive */}
         <motion.header
@@ -528,6 +612,37 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           </p>
         </motion.header>
 
+        {/* Graceful Resume Banner if interrupted by lock/backgrounding */}
+        <AnimatePresence>
+          {interruptedByBackground && !isPlaying && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="mt-3 flex items-center justify-between gap-3 px-4 py-2.5 rounded-full border shadow-sm"
+              style={{
+                background: "#FFFDF4",
+                borderColor: "#D4882A",
+                color: "#1D1D1F",
+              }}
+            >
+              <span className="text-xs font-medium" style={{ fontFamily: "var(--font-inter, sans-serif)" }}>
+                ⏸ Tape paused while you stepped away
+              </span>
+              <button
+                onClick={() => {
+                  setIsPlaying(true);
+                  setInterruptedByBackground(false);
+                }}
+                className="text-xs font-semibold px-3 py-1 rounded-full text-white transition-all active:scale-95"
+                style={{ background: "#D4882A" }}
+              >
+                Resume ▶
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Playlist badge — shows if tape created from YouTube playlist */}
         {(tape.playlistSourceId || tape.playlistName) && (
           <motion.div
@@ -550,7 +665,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           initial={{ opacity: 0, scale: 0.9, y: 16 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="w-full max-w-sm mt-3 sm:mt-5"
+          className="w-full max-w-md md:max-w-lg mt-3 sm:mt-5"
         >
           {inserted ? (
             /* ── Already inserted — show cassette with flip button ── */
@@ -638,7 +753,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4, delay: 0.2 }}
-              className="w-full max-w-sm mt-3 sm:mt-4 px-0"
+              className="w-full max-w-md md:max-w-lg mt-3 sm:mt-4 px-0"
             >
               <TrackList
                 key={side}
@@ -648,6 +763,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                 side={side}
                 onSelectTrack={handleSelectTrack}
                 accentColor={accentColor}
+                senderName={tape.senderName}
               />
             </motion.div>
           )}
@@ -661,7 +777,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3, delay: 0.25 }}
-              className="w-full max-w-sm mt-3 sm:mt-4 px-0"
+              className="w-full max-w-md md:max-w-lg mt-3 sm:mt-4 px-0"
             >
               <PlaylistMetadataSection
                 playlistSourceId={tape.playlistSourceId}
@@ -673,38 +789,35 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           )}
         </AnimatePresence>
 
-        {/* J-card / Dedication — responsive */}
+        {/* J-card / Dedication — responsive, always available */}
         <AnimatePresence>
-          {inserted && tape.dedication && (
+          {inserted && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4, delay: 0.3 }}
-              className="w-full max-w-sm mt-3 sm:mt-4 px-0"
+              className="w-full max-w-md md:max-w-lg mt-3 sm:mt-4 px-0"
             >
               <button
                 onClick={() => setShowDedication(v => !v)}
-                className="w-full flex items-center justify-between px-4 py-3 sm:py-3 rounded-xl transition-all hover:opacity-80"
+                className="w-full flex items-center justify-between px-4 sm:px-5 py-3 rounded-2xl transition-all hover:opacity-90 shadow-xs cursor-pointer"
                 style={{
-                  background: "#FFFEF4",
+                  background: "#FFFDF6",
                   border: "1px solid #EDE8D0",
-                  boxShadow: "1px 1px 6px rgba(0,0,0,0.05)",
-                  minHeight: "44px",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                  minHeight: "46px",
                   touchAction: "manipulation",
                 }}
               >
                 <div className="flex items-center gap-2">
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                    <path d="M2 3h10M2 6h10M2 9h7" stroke="#A07840" strokeWidth="1.2" strokeLinecap="round"/>
-                  </svg>
-                  <span className="text-xs tracking-widest uppercase"
-                    style={{ color: "#A07840", fontFamily: "monospace", fontWeight: 600 }}>
-                    Liner Notes
+                  <span className="text-base select-none">💌</span>
+                  <span className="text-xs tracking-widest uppercase font-mono font-bold text-[#A07840]">
+                    Tape Dedication & Liner Notes
                   </span>
                 </div>
-                <span className="text-xs" style={{ color: "#8E8E93" }}>
-                  {showDedication ? "▲" : "▼"}
+                <span className="text-xs font-mono text-[#8E8E93]">
+                  {showDedication ? "▲ Hide" : "▼ Read"}
                 </span>
               </button>
 
@@ -718,22 +831,26 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                     className="overflow-hidden"
                   >
                     <div
-                      className="px-5 py-5 rounded-b-xl note-paper paper-grain"
-                      style={{ borderTop: "none" }}
+                      className="px-5 py-5 rounded-b-2xl border border-t-0 border-[#EDE8D0] shadow-sm"
+                      style={{ background: "#FEFDF8" }}
                     >
                       <p
-                        className="text-sm leading-relaxed"
+                        className="text-sm sm:text-base leading-relaxed"
                         style={{
                           color: "#3D2010",
                           fontFamily: "'Playfair Display', Georgia, serif",
                           fontStyle: "italic",
-                          lineHeight: "1.75",
+                          lineHeight: "1.8",
                         }}
                       >
-                        &ldquo;{tape.dedication}&rdquo;
+                        {tape.dedication ? (
+                          <>&ldquo;{tape.dedication}&rdquo;</>
+                        ) : (
+                          <>&ldquo;A mixtape curated with love for {tape.recipientName || "You"}. Recorded on Side A & Side B with special songs & voice notes.&rdquo;</>
+                        )}
                       </p>
-                      <p className="text-xs mt-3" style={{ color: "#A07840", fontFamily: "monospace" }}>
-                        — {tape.senderName}
+                      <p className="text-xs mt-3 font-mono font-medium text-[#A07840]">
+                        — With love, {tape.senderName}
                       </p>
                     </div>
                   </motion.div>
@@ -751,7 +868,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.4, delay: 0.35 }}
-              className="mt-5 flex gap-2 flex-wrap"
+              className="mt-6 flex gap-3 flex-wrap items-center justify-center"
             >
               <ShareButton
                 title={tape.title ?? "A tape was made for you"}
@@ -782,10 +899,11 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                   tapeId: tape.publicId,
                   senderName: tape.senderName,
                 })}
-                className="btn-primary text-sm inline-flex"
+                className="btn-primary text-sm inline-flex items-center gap-2 px-6 py-3 rounded-xl shadow-md"
                 style={{ textDecoration: "none" }}
               >
-                Make One Back ❤
+                <span>Make a Tape for {tape.senderName}</span>
+                <span>❤️</span>
               </a>
             </motion.div>
           )}

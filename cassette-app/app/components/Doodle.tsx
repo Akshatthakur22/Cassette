@@ -17,6 +17,7 @@
  *   <DoodleScatter count={6} types={["star","heart","note"]} />
  */
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 export type DoodleType =
@@ -366,10 +367,12 @@ const SCATTER_DEFAULTS: DoodleType[] = [
 ];
 const SCATTER_COLORS = ["#E8901A", "#C0392B", "#D4608A", "#E8C430", "#2A7A8C", "#2D6A4F"];
 
-// Deterministic pseudo-random based on index
+// 100% deterministic 32-bit integer PRNG (Mulberry32) - identical across server and client
 function seededRandom(seed: number): number {
-  const x = Math.sin(seed + 1) * 10000;
-  return x - Math.floor(x);
+  let t = (seed + 0x6D2B79F5) | 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 export function DoodleScatter({
@@ -385,10 +388,10 @@ export function DoodleScatter({
     type: types[Math.floor(seededRandom(i * 7) * types.length)] as DoodleType,
     color: colors[Math.floor(seededRandom(i * 13) * colors.length)],
     size: minSize + Math.floor(seededRandom(i * 3) * (maxSize - minSize)),
-    top: `${5 + seededRandom(i * 11) * 88}%`,
-    left: `${3 + seededRandom(i * 17) * 92}%`,
+    top: `${Math.round(5 + seededRandom(i * 11) * 88)}%`,
+    left: `${Math.round(3 + seededRandom(i * 17) * 92)}%`,
     tilt: Math.floor(seededRandom(i * 5) * 60) - 30,
-    delay: seededRandom(i * 9) * 0.5,
+    delay: Math.round(seededRandom(i * 9) * 50) / 100,
   }));
 
   return (

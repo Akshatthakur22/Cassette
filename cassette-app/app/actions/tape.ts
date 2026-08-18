@@ -2,10 +2,53 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { generatePublicId, generateDraftToken, DRAFT_COOKIE } from "@/app/lib/tokens";
 import type { TapeStyle, TapeRelationship, TrackInput } from "@/app/lib/types";
 import { checkContentForSpam, checkForDuplicates } from "@/app/lib/safety";
+
+type VerifiedTape = Prisma.TapeGetPayload<{
+  select: {
+    id: true;
+    draftToken: true;
+    status: true;
+    title: true;
+    dedication: true;
+    senderName: true;
+    recipientName: true;
+    relationship: true;
+    style: true;
+    visibility: true;
+    memoryDate: true;
+    publicId: true;
+    createdAt: true;
+    updatedAt: true;
+    deletedAt: true;
+  };
+}>;
+
+type PublicTape = Prisma.TapeGetPayload<{
+  include: {
+    tracks: true;
+  };
+}>;
+
+type PublicShelfTape = Prisma.TapeGetPayload<{
+  select: {
+    publicId: true;
+    title: true;
+    senderName: true;
+    recipientName: true;
+    style: true;
+  };
+}>;
+
+type DraftTokenTape = Prisma.TapeGetPayload<{
+  include: {
+    tracks: true;
+  };
+}>;
 
 /** Extract the real client IP from common proxy headers */
 async function getClientIp(): Promise<string> {
@@ -20,7 +63,7 @@ async function getClientIp(): Promise<string> {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-async function getVerifiedTape(draftId: string) {
+async function getVerifiedTape(draftId: string): Promise<VerifiedTape | null> {
   const jar = await cookies();
   const token = jar.get(DRAFT_COOKIE)?.value;
   if (!token) return null;
@@ -47,19 +90,20 @@ async function getVerifiedTape(draftId: string) {
   });
   if (!tape || tape.draftToken !== token) return null;
   if (tape.status === "deleted") return null;
-  return tape as any;
+  return tape;
 }
 
 // ─── createDraft ────────────────────────────────────────────────────────────
 
 export async function createDraft(formData: FormData) {
   const senderName    = (formData.get("senderName")    as string | null)?.trim() ?? "";
-  const relationship  = (formData.get("relationship")  as string | null) ?? "other";
+  const relationship  = (formData.get("relationship")  as TapeRelationship | null) ?? "other";
   const style         = (formData.get("style")         as TapeStyle | null) ?? "classic";
   const recipientName = (formData.get("recipientName") as string | null)?.trim() || null;
   const title         = (formData.get("title")         as string | null)?.trim() || null;
   const dedication    = (formData.get("dedication")    as string | null)?.trim().slice(0, 500) || null;
   const createdFromTapeId = (formData.get("fromTapeId") as string | null) || null;
+  const visibility    = (formData.get("visibility")    as string | null) === "public" ? "public" : "unlisted";
 
   if (!senderName) {
     return { error: "Please enter your name." };
@@ -103,6 +147,7 @@ export async function createDraft(formData: FormData) {
       dedication,
       relationship,
       style,
+      visibility,
       status: "draft",
       createdFromTapeId,
     },
@@ -163,18 +208,44 @@ export async function addTrack(draftId: string, track: TrackInput) {
     return { error: `Side ${track.side} is full (12 tracks max).` };
   }
 
+  let durationSec = track.durationSec;
+  let trackTitle = track.title;
+  let trackArtist = track.artist ?? null;
+  let trackThumbnail = track.thumbnailUrl ?? null;
+
+  if ((!track.provider || track.provider === "youtube") && track.providerTrackId) {
+    try {
+      const { validateYouTubeVideo } = await import("@/app/lib/youtube-enhanced");
+      const validation = await validateYouTubeVideo(track.providerTrackId);
+      if (!validation.isValid) {
+        return { error: validation.error || "This YouTube video is unavailable or restricted." };
+      }
+      if (validation.durationSec) {
+        durationSec = validation.durationSec;
+      }
+      if (validation.thumbnailUrl && !trackThumbnail) {
+        trackThumbnail = validation.thumbnailUrl;
+      }
+      if (validation.channelTitle && !trackArtist) {
+        trackArtist = validation.channelTitle;
+      }
+    } catch (e) {
+      console.warn("[addTrack] Validation warning:", e);
+    }
+  }
+
   const created = await prisma.tapeTrack.create({
     data: {
       tapeId:          draftId,
       side:            track.side,
       position:        track.position,
-      title:           track.title,
-      artist:          track.artist ?? null,
-      thumbnailUrl:    track.thumbnailUrl ?? null,
+      title:           trackTitle,
+      artist:          trackArtist,
+      thumbnailUrl:    trackThumbnail,
       provider:        track.provider ?? "youtube",
       providerTrackId: track.providerTrackId,
       personalNote:    track.personalNote?.slice(0, 280) ?? null,
-      durationSec:     track.durationSec ?? null,
+      durationSec:     durationSec ?? null,
     },
   });
 
@@ -257,6 +328,15 @@ export async function addTracksFromPlaylist(
 
     createdTracks.push(created);
   }
+
+  await prisma.tape.update({
+    where: { id: draftId },
+    data: {
+      playlistSourceId: playlistId,
+      playlistSourceUrl: playlistUrl,
+      playlistName,
+    },
+  });
 
   // Track the event
   const { trackEvent, EVENTS } = await import("@/app/lib/posthog");
@@ -444,36 +524,21 @@ export async function getTapeForEditor(draftId: string) {
 
 // ─── getTapeByDraftToken (for creator management) ───────────────────────────
 
-export async function getTapeByDraftToken(draftToken: string) {
+export async function getTapeByDraftToken(draftToken: string): Promise<DraftTokenTape | null> {
   const tape = await prisma.tape.findUnique({
     where: { draftToken },
-    select: {
-      id: true,
-      publicId: true,
-      draftToken: true,
-      title: true,
-      dedication: true,
-      senderName: true,
-      recipientName: true,
-      relationship: true,
-      style: true,
-      visibility: true,
-      memoryDate: true,
-      status: true,
-      createdAt: true,
-      updatedAt: true,
-      deletedAt: true,
+    include: {
       tracks: { orderBy: [{ side: "asc" }, { position: "asc" }] },
     },
   });
 
   if (!tape || tape.status === "deleted") return null;
-  return tape as any;
+  return tape;
 }
 
 // ─── getTapeByPublicId (for recipient view) ──────────────────────────────────
 
-export async function getTapeByPublicId(publicId: string) {
+export async function getTapeByPublicId(publicId: string): Promise<PublicTape | null> {
   'use server';
   
   console.log(`[getTapeByPublicId] >>> START - publicId: ${publicId}`);
@@ -544,7 +609,7 @@ export async function recordShare(tapeId: string, platform: string) {
 }
 // ─── getPublicTapes (for homepage shelf) ────────────────────────────────────
 
-export async function getPublicTapes(limit = 18) {
+export async function getPublicTapes(limit = 18): Promise<PublicShelfTape[]> {
   // Try public-visibility tapes first; fall back gracefully if field doesn't match
   const tapes = await prisma.tape.findMany({
     where: {
@@ -561,7 +626,7 @@ export async function getPublicTapes(limit = 18) {
       recipientName: true,
       style: true,
     },
-  }).catch(() => [] as never[]);
+  }).catch(() => [] as PublicShelfTape[]);
   return tapes;
 }
 

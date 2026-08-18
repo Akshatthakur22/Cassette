@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { getPublicTapes } from "./actions/tape";
+import { ImagePreloader } from "@/app/components/ImagePreloader";
 import HomepageClient from "./components/HomepageClient";
 
 // Shelf demo tapes — shown when no public tapes exist yet
@@ -33,5 +33,15 @@ export default async function LandingPage() {
       }))
     : DEMO_TAPES;
 
-  return <HomepageClient tapes={tapesForShelf} />;
+  const preloadImages = [1, 2, 3, 4, 5, 6].map((num) => ({
+    src: `/images/optimized/${num}.png`,
+    format: "png" as const,
+  }));
+
+  return (
+    <>
+      <ImagePreloader images={preloadImages} />
+      <HomepageClient tapes={tapesForShelf} />
+    </>
+  );
 }
