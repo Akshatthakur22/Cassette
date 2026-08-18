@@ -188,43 +188,8 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
 
   const [interruptedByBackground, setInterruptedByBackground] = useState(false);
 
-  // Screen Wake Lock — keeps screen active during quiet listening
+  // Screen Wake Lock — keeps screen active during active viewing
   useWakeLock(isPlaying);
-
-  // Media Session API — lock screen controls and notification artwork
-  useMediaSession(
-    currentTrack
-      ? {
-          title: currentTrack.title,
-          artist: currentTrack.artist,
-          album: tape.title || "CASSETTE Mixtape",
-          artworkUrl: currentTrack.thumbnailUrl,
-        }
-      : null,
-    {
-      isPlaying,
-      onPlay: () => {
-        setIsPlaying(true);
-        setInterruptedByBackground(false);
-      },
-      onPause: () => setIsPlaying(false),
-      onPrevious: () => handlePrev(),
-      onNext: () => handleNext(),
-    }
-  );
-
-  // Detect if audio paused due to mobile screen lock or tab backgrounding
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
-        if (isPlaying) {
-          setInterruptedByBackground(true);
-        }
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => window.removeEventListener("visibilitychange", handleVisibility);
-  }, [isPlaying]);
 
   const handleNext = useCallback(() => {
     setProgress(0);

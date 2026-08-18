@@ -1,7 +1,6 @@
 /**
- * Background Playback Manager
- * Enables YouTube playback to continue when tab is backgrounded
- * Uses Media Session API for lock screen controls
+ * Background Playback State Helper
+ * Tracks visibility state and coordinates lightweight playback metadata.
  */
 
 export interface BackgroundPlaybackState {
@@ -23,8 +22,7 @@ let bgState: BackgroundPlaybackState = {
 let visibilityChangeListener: (() => void) | null = null;
 
 /**
- * Initialize background playback support
- * Must be called once in app root
+ * Initialize background visibility listener
  */
 export function initBackgroundPlayback() {
   if (typeof window === "undefined") return;
@@ -34,9 +32,9 @@ export function initBackgroundPlayback() {
     bgState.isBackgrounded = document.hidden;
 
     if (bgState.isBackgrounded && !wasBackgrounded) {
-      handleAppBackgrounded();
+      bgState.isPlayingInBackground = true;
     } else if (!bgState.isBackgrounded && wasBackgrounded) {
-      handleAppForegrounded();
+      bgState.isPlayingInBackground = false;
     }
   };
 
@@ -49,17 +47,8 @@ export function initBackgroundPlayback() {
   });
 }
 
-function handleAppBackgrounded() {
-  bgState.isPlayingInBackground = true;
-}
-
-function handleAppForegrounded() {
-  bgState.isPlayingInBackground = false;
-}
-
 /**
- * Update background playback state from UI player
- * Called by PlayerBar to keep state in sync
+ * Update background playback state
  */
 export function updateBackgroundPlaybackState(
   videoId: string | null,
@@ -77,80 +66,14 @@ export function updateBackgroundPlaybackState(
 }
 
 /**
- * Update Media Session for currently playing track
- * Shows in lock screen / control center on supported devices
- */
-export function updateMediaSession(
-  title: string,
-  artist?: string,
-  artwork?: string,
-  duration?: number,
-  currentTime?: number
-) {
-  if (typeof window === "undefined" || !("mediaSession" in navigator)) {
-    return;
-  }
-
-  const mediaSession = navigator.mediaSession;
-
-  try {
-    mediaSession.metadata = new (window as any).MediaMetadata({
-      title,
-      artist: artist || "Unknown",
-      artwork: artwork
-        ? [
-            {
-              src: artwork,
-              sizes: "512x512",
-              type: "image/png",
-            },
-          ]
-        : [],
-    });
-
-    // Set playback time if available
-    if (duration !== undefined && currentTime !== undefined) {
-      mediaSession.playbackState = "playing";
-      try {
-        (mediaSession as any).setPositionState({
-          duration,
-          playbackRate: 1,
-          position: currentTime,
-        });
-      } catch (e) {
-        console.debug("Media Session position state not supported");
-      }
-    }
-  } catch (e) {
-    console.debug("Media Session update failed:", e);
-  }
-}
-
-/**
- * Clear Media Session
- */
-export function clearMediaSession() {
-  if (typeof window === "undefined" || !("mediaSession" in navigator)) {
-    return;
-  }
-
-  try {
-    navigator.mediaSession.metadata = null;
-    navigator.mediaSession.playbackState = "none";
-  } catch (e) {
-    console.debug("Media Session clear failed:", e);
-  }
-}
-
-/**
- * Get current background playback state
+ * Get current background playback state snapshot
  */
 export function getBackgroundPlaybackState(): BackgroundPlaybackState {
   return { ...bgState };
 }
 
 /**
- * Check if background playback is active
+ * Check if document is currently hidden while playing
  */
 export function isPlayingInBackground(): boolean {
   return bgState.isBackgrounded && bgState.isPlayingInBackground;

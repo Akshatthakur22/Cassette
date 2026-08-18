@@ -1,9 +1,9 @@
 /**
- * Background Playback Service Worker
- * Handles YouTube playback continuation when app is backgrounded
+ * Cassette Playback State Worker
+ * Coordinates lightweight playback state with the main document for PWA background management.
  * 
- * Note: YouTube IFrame API has restrictions on cross-origin audio
- * This worker stores state and coordinates with the main thread
+ * Note: Browser & YouTube security policies prevent Service Workers from executing HTML video/audio streams.
+ * Media playback is owned by the active document via the YouTube IFrame API and Media Session API.
  */
 
 let bgPlaybackState = {
@@ -13,9 +13,9 @@ let bgPlaybackState = {
   isPlaying: false,
 };
 
-// Listen for messages from main thread
+// Listen for playback state updates from main thread
 self.addEventListener('message', (event) => {
-  const { type, payload } = event.data;
+  const { type, payload } = event.data || {};
 
   if (type === 'BACKGROUND_PLAYBACK_START') {
     bgPlaybackState = {
@@ -24,12 +24,10 @@ self.addEventListener('message', (event) => {
       duration: payload.duration,
       isPlaying: true,
     };
-    console.log('Background playback started:', bgPlaybackState);
   }
 
   if (type === 'BACKGROUND_PLAYBACK_STOP') {
     bgPlaybackState.isPlaying = false;
-    console.log('Background playback stopped');
   }
 
   if (type === 'UPDATE_PLAYBACK_STATE') {
@@ -42,26 +40,8 @@ self.addEventListener('message', (event) => {
   }
 
   if (type === 'GET_PLAYBACK_STATE') {
-    event.ports[0].postMessage(bgPlaybackState);
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage(bgPlaybackState);
+    }
   }
-});
-
-// Periodic sync for background playback
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-playback') {
-    event.waitUntil(
-      (async () => {
-        if (bgPlaybackState.isPlaying) {
-          console.log('Sync playback - current state:', bgPlaybackState);
-          // Future: Could use periodic background sync to update UI
-        }
-      })()
-    );
-  }
-});
-
-// Handle fetch events (for caching)
-self.addEventListener('fetch', (event) => {
-  // Allow normal fetch behavior - we're mainly interested in message passing
-  // for background playback state management
 });

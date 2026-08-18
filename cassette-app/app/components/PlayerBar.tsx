@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { type Track, formatDuration } from "@/app/lib/fake-data";
 import { playClickSound, playSkipSound, playSeekSound } from "@/app/lib/sounds";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
-import { updateBackgroundPlaybackState, updateMediaSession, clearMediaSession, initBackgroundPlayback } from "@/app/lib/background-playback";
+import { updateBackgroundPlaybackState, initBackgroundPlayback } from "@/app/lib/background-playback";
+import { usePlaybackController } from "@/app/lib/usePlaybackController";
 
 declare global {
   interface Window {
@@ -231,272 +232,62 @@ export default function PlayerBar({
   onTimeUpdate,
   accentColor = "#D4882A",
 }: PlayerBarProps) {
-  const track = tracks[currentIndex];
-  const playerDivId = "yt-player-cassette";
-  const playerRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const apiReadyRef = useRef(false);
-  const initPendingRef = useRef(false);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isPlayingRef = useRef(isPlaying);
-  const onNextRef = useRef(onNext);
-  const onTimeUpdateRef = useRef(onTimeUpdate);
   const [showVideo, setShowVideo] = useState(false);
-  const [ytReady, setYtReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [trackWarning, setTrackWarning] = useState<string | null>(null);
 
-  const [currentDuration, setCurrentDuration] = useState<number>(track?.durationSec || 0);
+  // Centralized Playback Controller
+  const controller = usePlaybackController({
+    tracks: tracks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist,
+      thumbnailUrl: t.thumbnailUrl,
+      provider: t.provider ?? "youtube",
+      providerTrackId: t.providerTrackId,
+      durationSec: t.durationSec,
+      personalNote: t.personalNote,
+      side: t.side as "A" | "B",
+    })),
+    initialIndex: currentIndex,
+    playerDivId: "yt-player-cassette",
+    onTrackChange: (idx) => onTrackSelect?.(idx),
+  });
 
-  useEffect(() => {
-    setCurrentDuration(track?.durationSec || 0);
-  }, [track?.id, track?.durationSec]);
+  const track = controller.currentTrack || tracks[currentIndex];
+  const activeIsPlaying = isPlaying || controller.isPlaying;
+  const activeDuration = controller.duration || track?.durationSec || 0;
+  const activeProgress = isDragging ? progress : (controller.progress || progress);
+  const playerDivId = controller.playerDivId;
+  const audioRef = controller.audioRef;
+  const trackWarning = controller.trackWarning;
 
-  // Initialize background playback on first mount
   useEffect(() => {
     initBackgroundPlayback();
   }, []);
 
-  useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
-  useEffect(() => { onNextRef.current = onNext; }, [onNext]);
-  useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
-
-  // Clear media session when not playing
+  // Sync parent when controller updates time
   useEffect(() => {
-    if (!isPlaying) {
-      clearMediaSession();
-    }
-  }, [isPlaying]);
-
-  // ── Load YouTube IFrame API once ─────────────────────────────────────────
-  useEffect(() => {
-    if (apiReadyRef.current) return;
-    if (window.YT?.Player) { apiReadyRef.current = true; setYtReady(true); return; }
-    if (!document.getElementById("yt-iframe-script")) {
-      const tag = document.createElement("script");
-      tag.id = "yt-iframe-script";
-      tag.src = "https://www.youtube.com/iframe_api";
-      tag.async = true; tag.defer = true;
-      document.head.appendChild(tag);
-    }
-    const prev = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      apiReadyRef.current = true; setYtReady(true); prev?.();
-    };
-    const t = setTimeout(() => {
-      if (!apiReadyRef.current && window.YT?.Player) { apiReadyRef.current = true; setYtReady(true); }
-    }, 10000);
-    return () => clearTimeout(t);
-  }, []);
-
-  // ── Create YT player ──────────────────────────────────────────────────────
-  const createPlayer = useCallback((videoId: string) => {
-    if (playerRef.current || initPendingRef.current) return;
-    if (!videoId || videoId === "undefined") return;
-    const el = document.getElementById(playerDivId);
-    if (!el || !window.YT?.Player) return;
-    initPendingRef.current = true;
-    try {
-      playerRef.current = new window.YT.Player(playerDivId, {
-        videoId,
-        width: "100%", height: "100%",
-        // Keep autoplay disabled to respect browser policy
-        // Audio will play when user clicks the play button
-        playerVars: { 
-          autoplay: 0, 
-          controls: 1, 
-          modestbranding: 1, 
-          rel: 0, 
-          playsinline: 1, 
-          fs: 0, 
-          iv_load_policy: 3,
-        },
-        events: {
-          onReady(event: any) {
-            initPendingRef.current = false;
-            // Set volume to max and unmute when player is ready
-            try {
-              event.target.setVolume(100);
-              event.target.unMute();
-              const dur = event.target.getDuration?.();
-              if (dur && dur > 0) {
-                setCurrentDuration(Math.round(dur));
-              }
-              console.log("[PlayerBar] Player ready - volume set to 100, unmuted, duration:", dur);
-            } catch (e) {
-              console.warn("[PlayerBar] Could not set volume/unmute on ready:", e);
-            }
-            // Don't auto-play here - wait for user interaction via play button
-            if (isPlayingRef.current) {
-              event.target.playVideo();
-            }
-          },
-          onStateChange(event: any) {
-            if (event.data === 1) {
-              const dur = event.target.getDuration?.();
-              if (dur && dur > 0) {
-                setCurrentDuration(Math.round(dur));
-              }
-              trackClientEvent(CLIENT_EVENTS.TAPE_PLAYED, { videoId }).catch(() => {});
-            }
-            if (event.data === 0) onNextRef.current();
-          },
-          onError(event: any) { 
-            console.warn("[PlayerBar] YouTube player error (code " + event.data + "):", track?.title);
-            setTrackWarning("This track isn't available right now. Skipping to next track...");
-            setTimeout(() => {
-              setTrackWarning(null);
-              onNextRef.current();
-            }, 2200);
-          },
-        },
-      });
-    } catch { initPendingRef.current = false; }
-  }, []);
-
-  useEffect(() => { if (ytReady && track?.providerTrackId && track?.provider === "youtube") createPlayer(track.providerTrackId); }, [ytReady, createPlayer, track?.providerTrackId, track?.provider]);
-
-  // Load voice recording audio
-  useEffect(() => {
-    if (!audioRef.current || track?.provider !== "voice") return;
-    
-    // Construct the audio URL from the track's providerTrackId (which is the trackId)
-    const audioUrl = `/voice-recordings/${track.providerTrackId}.webm`;
-    console.log("[PlayerBar] Loading voice recording:", { trackId: track.providerTrackId, url: audioUrl });
-    
-    audioRef.current.src = audioUrl;
-    audioRef.current.load();
-  }, [track?.providerTrackId, track?.provider]);
-
-  useEffect(() => {
-    if (!playerRef.current || !track?.providerTrackId || track?.provider !== "youtube") return;
-    try {
-      if (isPlaying && typeof playerRef.current.loadVideoById === "function") {
-        playerRef.current.loadVideoById(track.providerTrackId);
-      } else if (typeof playerRef.current.cueVideoById === "function") {
-        playerRef.current.cueVideoById(track.providerTrackId);
-      }
-    } catch (e) {
-      console.warn("[PlayerBar] YouTube video load/cue error:", e);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track?.id]);
-
-  useEffect(() => {
-    // Handle YouTube playback
-    if (track?.provider === "youtube" && playerRef.current) {
-      try { 
-        if (isPlaying) {
-          // Ensure unmute before playing
-          const beforeMute = typeof playerRef.current.isMuted === "function" ? playerRef.current.isMuted() : false;
-          playerRef.current.unMute?.();
-          const afterMute = typeof playerRef.current.isMuted === "function" ? playerRef.current.isMuted() : false;
-          playerRef.current.setVolume?.(100);
-          console.log("[PlayerBar] Playing with unmute:", { beforeMute, afterMute });
-          if (typeof playerRef.current.playVideo === "function") {
-            playerRef.current.playVideo();
-          }
-        } else {
-          if (typeof playerRef.current.pauseVideo === "function") {
-            playerRef.current.pauseVideo();
-          }
-        }
-      } catch (e) {
-        console.error("[PlayerBar] YouTube playback error:", e);
+    if (controller.currentTime >= 0 && activeDuration > 0) {
+      onTimeUpdate?.(controller.currentTime, activeDuration);
+      if (track) {
+        updateBackgroundPlaybackState(
+          track.providerTrackId,
+          controller.currentTime,
+          activeDuration,
+          activeIsPlaying
+        );
       }
     }
-    
-    // Handle voice recording playback
-    if (track?.provider === "voice" && audioRef.current) {
-      try {
-        if (isPlaying) {
-          audioRef.current.play().catch(e => console.error("[PlayerBar] Audio play error:", e));
-        } else {
-          audioRef.current.pause();
-        }
-      } catch (e) {
-        console.error("[PlayerBar] Audio control error:", e);
-      }
-    }
-  }, [isPlaying, track?.provider]);
+  }, [controller.currentTime, activeDuration, track, activeIsPlaying, onTimeUpdate]);
 
   // ── Explicit Seek Handler (User-Initiated Only) ─────────────────────────
-  const handleExplicitSeek = useCallback((ratio: number) => {
-    const clamped = Math.max(0, Math.min(1, ratio));
-    onSeek(clamped);
-
-    const activeDuration = currentDuration || track?.durationSec || 0;
-    if (activeDuration <= 0) return;
-
-    const targetSec = clamped * activeDuration;
-
-    if (track?.provider === "youtube" && playerRef.current) {
-      try {
-        playerRef.current.seekTo(targetSec, true);
-      } catch (e) {
-        console.error("[PlayerBar] YouTube seek error:", e);
-      }
-    } else if (track?.provider === "voice" && audioRef.current) {
-      try {
-        audioRef.current.currentTime = targetSec;
-      } catch (e) {
-        console.error("[PlayerBar] Audio seek error:", e);
-      }
-    }
-  }, [currentDuration, track?.durationSec, track?.provider, onSeek]);
-
-  useEffect(() => {
-    if (tickRef.current) clearInterval(tickRef.current);
-    if (!isPlaying) return;
-    tickRef.current = setInterval(() => {
-      try {
-        let elapsed = 0;
-        let dur = currentDuration || track?.durationSec || 0;
-        
-        // Get time from YouTube player
-        if (track?.provider === "youtube" && playerRef.current) {
-          elapsed = playerRef.current.getCurrentTime?.() ?? 0;
-          const ytDur = playerRef.current.getDuration?.();
-          if (ytDur && ytDur > 0) {
-            dur = ytDur;
-            if (Math.round(ytDur) !== currentDuration) {
-              setCurrentDuration(Math.round(ytDur));
-            }
-          }
-        }
-        
-        // Get time from audio element
-        if (track?.provider === "voice" && audioRef.current) {
-          elapsed = audioRef.current.currentTime;
-          const audioDur = audioRef.current.duration;
-          if (audioDur && !isNaN(audioDur) && isFinite(audioDur) && audioDur > 0) {
-            dur = audioDur;
-            if (Math.round(audioDur) !== currentDuration) {
-              setCurrentDuration(Math.round(audioDur));
-            }
-          }
-        }
-        
-        if (dur > 0) {
-          onTimeUpdateRef.current?.(elapsed, dur);
-          // Update background playback state for lock screen / background mode
-          if (track) {
-            updateBackgroundPlaybackState(track.providerTrackId, elapsed, dur, true);
-            updateMediaSession(
-              track.title,
-              track.artist,
-              track.thumbnailUrl,
-              dur,
-              elapsed
-            );
-          }
-        }
-      } catch (e) {
-        console.error("[PlayerBar] Time update error:", e);
-      }
-    }, 500);
-    return () => { if (tickRef.current) clearInterval(tickRef.current); };
-  }, [isPlaying, track?.id, track, currentDuration]);
+  const handleExplicitSeek = useCallback(
+    (ratio: number) => {
+      onSeek(ratio);
+      controller.seekToRatio(ratio);
+    },
+    [onSeek, controller]
+  );
 
   // ── Scrubber interaction ──────────────────────────────────────────────────
   function scrubAt(clientX: number, rect: DOMRect) {
@@ -521,8 +312,8 @@ export default function PlayerBar({
 
   if (!track) return null;
 
-  const displayDuration = currentDuration || track.durationSec || 0;
-  const elapsed = Math.round(progress * displayDuration);
+  const displayDuration = activeDuration;
+  const elapsed = Math.round(activeProgress * displayDuration);
   const lcdText = trackWarning
     ? trackWarning
     : `${track.artist ? `${track.artist} – ` : ""}${track.title}    ${formatDuration(elapsed)} / ${formatDuration(displayDuration)}`;
@@ -606,20 +397,29 @@ export default function PlayerBar({
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="lg"
-              onClick={() => { playClickSound(true); isPlaying ? onPause() : onPlay(); }}
-              aria-label={isPlaying ? "Pause" : "Play"}
-              active={isPlaying}
+              onClick={() => {
+                playClickSound(true);
+                if (activeIsPlaying) {
+                  controller.pause();
+                  onPause();
+                } else {
+                  controller.play();
+                  onPlay();
+                }
+              }}
+              aria-label={activeIsPlaying ? "Pause" : "Play"}
+              active={activeIsPlaying}
               color={accentColor}
             >
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={isPlaying ? "pause" : "play"}
+                  key={activeIsPlaying ? "pause" : "play"}
                   initial={{ opacity: 0, scale: 0.55 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.55 }}
                   transition={{ duration: 0.09 }}
                 >
-                  {isPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+                  {activeIsPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
                 </motion.div>
               </AnimatePresence>
             </HardwareButton>
