@@ -152,10 +152,11 @@ export default function DeveloperTapeClient() {
         <header className="pt-8 sm:pt-10 flex items-center justify-between border-b border-[#241D16]/20 pb-4">
           <Link
             href="/"
-            className="text-xs font-bold tracking-[0.16em] text-[#A73c2E] hover:opacity-75 transition-opacity uppercase"
+            className="flex items-center gap-1.5 text-xs font-bold tracking-[0.16em] text-[#A73c2E] hover:opacity-75 transition-opacity uppercase"
             style={{ fontFamily: "'Archivo Narrow', sans-serif" }}
           >
-            ← CASSETTE HOME
+            <img src="/logo.png" alt="CASSETTE" className="h-5 w-auto object-contain" />
+            <span>← CASSETTE HOME</span>
           </Link>
           <span
             className="text-xs font-bold tracking-[0.14em] text-[#55493A] uppercase"

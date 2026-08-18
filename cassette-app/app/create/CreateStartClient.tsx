@@ -108,9 +108,10 @@ export default function CreateStartClient() {
           borderBottom: "1px solid #E8E5DF",
         }}
       >
-        <a href="/" className="text-xs tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
+        <a href="/" className="flex items-center gap-1.5 text-xs tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
           style={{ color: "#8E8E93", fontFamily: "monospace" }}>
-          ← CASSETTE
+          <img src="/logo.png" alt="CASSETTE" className="h-5 w-auto object-contain" />
+          <span>← CASSETTE</span>
         </a>
         <span className="text-xs" style={{ color: "#8E8E93", fontFamily: "monospace" }}>
           {step === "intention" ? "1 / 2" : "2 / 2"}

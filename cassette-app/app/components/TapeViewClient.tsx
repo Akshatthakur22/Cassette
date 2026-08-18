@@ -585,10 +585,11 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
         >
           <a
             href="/"
-            className="text-[9px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase transition-opacity hover:opacity-60 order-1 sm:order-none"
+            className="flex items-center gap-1.5 text-[9px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase transition-opacity hover:opacity-60 order-1 sm:order-none"
             style={{ color: "#8E8E93", fontFamily: "monospace" }}
           >
-            ← CASSETTE
+            <img src="/logo.png" alt="CASSETTE" className="h-4 sm:h-5 w-auto object-contain" />
+            <span>← CASSETTE</span>
           </a>
           <div className="text-center order-2 sm:order-1">
             <p className="text-[8px] sm:text-[9px] tracking-[0.15em] sm:tracking-[0.2em] uppercase"

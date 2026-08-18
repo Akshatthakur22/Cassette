@@ -43,10 +43,12 @@ function TopNav() {
       >
         <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 h-12 sm:h-14 flex items-center justify-between">
           {/* Logo — responsive */}
-          <Link href="/" className="flex items-center gap-1.5 sm:gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-sm">
-            <div className="w-6 sm:w-8">
-              <NavCassetteIcon />
-            </div>
+          <Link href="/" className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-sm group">
+            <img
+              src="/logo.png"
+              alt="CASSETTE Logo"
+              className="h-7 sm:h-9 w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+            />
             <span
               style={{
                 fontFamily: "var(--font-playfair, 'Playfair Display', Georgia, serif)",
@@ -648,7 +650,10 @@ function Footer() {
         background: "#FFFBF0",
       }}
     >
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl mx-auto flex flex-col items-center gap-2">
+        <Link href="/" className="inline-block transition-transform hover:scale-105">
+          <img src="/logo.png" alt="CASSETTE" className="h-10 sm:h-12 w-auto object-contain mx-auto" />
+        </Link>
         <p
           style={{
             fontSize: "12px",

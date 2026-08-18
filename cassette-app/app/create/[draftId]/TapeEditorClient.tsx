@@ -349,9 +349,10 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
           }}
         >
           <div className="flex items-center gap-3">
-            <a href="/" className="text-[9px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
+            <a href="/" className="flex items-center gap-1.5 text-[9px] sm:text-xs tracking-[0.15em] sm:tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
               style={{ color: "#8E8E93", fontFamily: "monospace" }}>
-              ← CASSETTE
+              <img src="/logo.png" alt="CASSETTE" className="h-4 sm:h-5 w-auto object-contain" />
+              <span>← CASSETTE</span>
             </a>
 
             {/* Visibility Badge */}

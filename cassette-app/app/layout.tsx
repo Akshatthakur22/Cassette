@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
@@ -25,6 +26,14 @@ export const metadata: Metadata = {
     title: "CASSETTE — Put your feelings on tape",
     description: "Send an interactive retro 3D mixtape link to someone special.",
     images: ["/api/og-image?title=CASSETTE&sender=Someone&recipient=You&style=classic"],
+  },
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
+  verification: {
+    google: "Q_4iJe2-dQi-PaSKqqaQZW0Hijwbaid7u-VAEglI0ww",
   },
   robots: { index: true, follow: true },
   manifest: "/manifest.json",
@@ -85,7 +94,7 @@ export default function RootLayout({
     "@type": "Organization",
     name: "Cassette Digital Mixtape",
     url: "https://cassette-share.vercel.app",
-    logo: "https://cassette-share.vercel.app/api/og-image",
+    logo: "https://cassette-share.vercel.app/logo.png",
     founder: {
       "@type": "Person",
       name: "Akshat Thakur",
@@ -110,12 +119,25 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
-        <link
-          rel="icon"
-          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect fill='%23D4882A' width='48' height='48'/><text x='24' y='34' font-size='30' font-weight='bold' text-anchor='middle' fill='%23060408' font-family='serif'>♫</text></svg>"
-        />
+        <link rel="icon" href="/logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo.png" />
+        <meta name="google-site-verification" content="Q_4iJe2-dQi-PaSKqqaQZW0Hijwbaid7u-VAEglI0ww" />
       </head>
       <body className="min-h-full flex flex-col">
+        {/* Google Analytics (gtag.js) */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0RJSENM0M6"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-0RJSENM0M6');
+          `}
+        </Script>
         <PerformanceMonitor />
         {children}
         <ServiceWorkerRegistrar />

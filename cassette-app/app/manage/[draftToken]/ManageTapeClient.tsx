@@ -45,8 +45,9 @@ export default function ManageTapeClient({ tape, draftToken }: Props) {
       <div className="relative z-10 flex flex-col flex-1">
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-8 pb-4">
-          <Link href="/" className="text-xs font-mono tracking-widest" style={{ color: "#6B5E4E" }}>
-            ← CASSETTE
+          <Link href="/" className="flex items-center gap-1.5 text-xs font-mono tracking-widest" style={{ color: "#6B5E4E" }}>
+            <img src="/logo.png" alt="CASSETTE" className="h-5 w-auto object-contain" />
+            <span>← CASSETTE</span>
           </Link>
           <h1 className="text-xs font-mono tracking-widest uppercase" style={{ color: "#A89880" }}>
             Manage Tape

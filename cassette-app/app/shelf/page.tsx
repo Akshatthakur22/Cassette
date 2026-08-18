@@ -94,9 +94,10 @@ export default async function ShelfPage({
           borderBottom: "1px solid #E8E5DF",
         }}
       >
-        <a href="/" className="text-xs tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
+        <a href="/" className="flex items-center gap-1.5 text-xs tracking-[0.2em] uppercase transition-opacity hover:opacity-60"
           style={{ color: "#8E8E93", fontFamily: "monospace" }}>
-          ← CASSETTE
+          <img src="/logo.png" alt="CASSETTE" className="h-5 w-auto object-contain" />
+          <span>← CASSETTE</span>
         </a>
         <h1 className="text-sm font-semibold"
           style={{ color: "#1D1D1F", fontFamily: "'Playfair Display', serif", fontStyle: "italic" }}>
