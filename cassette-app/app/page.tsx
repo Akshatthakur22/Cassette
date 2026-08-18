@@ -15,6 +15,40 @@ const DEMO_TAPES = [
   { publicId: "demo-9", title: "Hostel Nights", senderName: "Veer", recipientName: "Anu", style: "peach" as const, rotationDeg: -2, yOffset: 1 },
 ];
 
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "CASSETTE — Make & Send Interactive Digital Mixtapes Online",
+  description: "Create a nostalgic digital mixtape for someone special. Add YouTube songs, record personal voice notes, write handwritten liner notes, and send an interactive 3D cassette link.",
+  alternates: {
+    canonical: "https://cassette-share.vercel.app",
+  },
+  openGraph: {
+    title: "CASSETTE — Put your feelings on tape ❤️",
+    description: "A no-signup digital mixtape maker. Pick songs, record voice notes, write handwritten liner notes, send a link.",
+    url: "https://cassette-share.vercel.app",
+    type: "website",
+    images: [{ url: "/api/og-image?title=CASSETTE&sender=Someone&recipient=You&style=classic", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CASSETTE — Digital Mixtape Maker",
+    description: "Send an interactive retro 3D mixtape link to someone special.",
+    images: ["/api/og-image?title=CASSETTE&sender=Someone&recipient=You&style=classic"],
+  },
+  keywords: [
+    "digital mixtape maker",
+    "make a playlist for someone",
+    "y2k playlist website",
+    "send a mixtape online",
+    "nostalgic gift idea",
+    "retro cassette player online",
+    "virtual tape recorder",
+    "music gift for best friend",
+    "anniversary playlist gift",
+  ],
+};
+
 export const revalidate = 60; // revalidate shelf every minute
 
 export default async function LandingPage() {

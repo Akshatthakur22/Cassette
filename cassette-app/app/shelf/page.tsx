@@ -5,13 +5,32 @@ import { BackgroundImage } from "@/app/components/BackgroundImage";
 import ShelfClientPage from "./ShelfClientPage";
 
 export const metadata: Metadata = {
-  title: "Public Cassettes | CASSETTE",
-  description: "Discover public cassettes made by creators. Find mood-based playlists and mixtapes shared by the community.",
-  openGraph: {
-    title: "Public Cassettes | CASSETTE",
-    description: "Discover tapes made by creators around the world. Digital mixtapes filled with emotion.",
-    type: "website",
+  title: "Public Mixtape Shelf — Discover Community Tapes | CASSETTE",
+  description: "Browse public digital mixtapes created with love by people worldwide. Find mood-based playlists, retro Y2K tapes, and personal songs.",
+  alternates: {
+    canonical: "https://cassette-share.vercel.app/shelf",
   },
+  openGraph: {
+    title: "Public Mixtape Shelf — CASSETTE",
+    description: "Discover public mixtapes created by music lovers around the world.",
+    type: "website",
+    images: [{ url: "/api/og-image?title=Public%20Mixtape%20Shelf&sender=Community&recipient=You&style=classic", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Public Mixtape Shelf — CASSETTE",
+    description: "Discover public mixtapes created by music lovers around the world.",
+    images: ["/api/og-image?title=Public%20Mixtape%20Shelf&sender=Community&recipient=You&style=classic"],
+  },
+  keywords: [
+    "public mixtapes",
+    "digital mixtape shelf",
+    "y2k playlists",
+    "community mixtapes",
+    "song recommendations",
+    "retro music playlists",
+    "send a mixtape online",
+  ],
   robots: {
     index: true,
     follow: true,

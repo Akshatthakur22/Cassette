@@ -40,6 +40,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     return {
       title,
       description,
+      alternates: isPublic ? { canonical: `${domain}/t/${publicId}` } : undefined,
       robots: { 
         index: isPublic, 
         follow: isPublic,

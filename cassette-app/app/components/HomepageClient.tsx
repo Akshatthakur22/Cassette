@@ -544,6 +544,100 @@ function FinalCtaSection() {
   );
 }
 
+/* ─── FAQ Section for GEO / AEO / LLM Discoverability ──────────────────────── */
+function FAQSection() {
+  const faqs = [
+    {
+      q: "What is Cassette?",
+      a: "Cassette is an interactive digital mixtape platform. It lets you curate music tracks, record personal voice notes, write handwritten liner notes, and share an unboxing 3D tape experience with anyone.",
+    },
+    {
+      q: "Is Cassette free to use?",
+      a: "Yes, Cassette is 100% free with no signup or account required. You can make and send digital mixtapes instantly.",
+    },
+    {
+      q: "How do I send a digital mixtape to someone?",
+      a: "After adding your songs and voice recordings, Cassette creates a private unlisted link. You can send it directly via WhatsApp, SMS, Email, or social media.",
+    },
+    {
+      q: "Can I record a voice message on my mixtape?",
+      a: "Yes, you can record personal audio messages directly in your browser and attach them alongside music tracks on Side A or Side B of your tape.",
+    },
+  ];
+
+  return (
+    <section className="w-full py-16 px-4 sm:px-6" style={{ background: "#F5F0E6", borderTop: "1px solid var(--color-hairline)" }}>
+      {/* FAQPage JSON-LD Schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faqs.map((f) => ({
+              "@type": "Question",
+              name: f.q,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: f.a,
+              },
+            })),
+          }),
+        }}
+      />
+      {/* HowTo JSON-LD Schema for AEO */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "HowTo",
+            name: "How to Make a Digital Mixtape",
+            description: "A 3-step guide to creating a personalized digital mixtape with music, voice notes, and handwritten liner notes.",
+            step: [
+              {
+                "@type": "HowToStep",
+                position: 1,
+                name: "Search & Pick Songs",
+                text: "Find your favorite songs or playlists on YouTube and add them to Side A or Side B of your tape.",
+                url: "https://cassette-share.vercel.app/create",
+              },
+              {
+                "@type": "HowToStep",
+                position: 2,
+                name: "Write Personal Notes & Voice Messages",
+                text: "Add handwritten liner notes for each song, record personal voice notes directly in your browser, and choose a cassette tape design.",
+                url: "https://cassette-share.vercel.app/create",
+              },
+              {
+                "@type": "HowToStep",
+                position: 3,
+                name: "Send the Tape Link",
+                text: "Share your private tape link with someone special or feature it on the public community shelf.",
+                url: "https://cassette-share.vercel.app/create",
+              },
+            ],
+          }),
+        }}
+      />
+
+      <div className="max-w-3xl mx-auto text-center mb-10">
+        <p className="text-xs font-mono tracking-widest uppercase text-[#8A7A68] mb-2">Got Questions?</p>
+        <h2 className="text-3xl sm:text-4xl font-bold italic font-serif text-[#1C140A]">Frequently Asked Questions</h2>
+      </div>
+
+      <div className="max-w-2xl mx-auto flex flex-col gap-4">
+        {faqs.map((f, i) => (
+          <div key={i} className="p-5 rounded-2xl bg-white border border-[#E8E1D5] shadow-xs text-left">
+            <h3 className="text-base font-semibold text-[#1C140A] mb-2">{f.q}</h3>
+            <p className="text-xs sm:text-sm text-[#6B5B47] leading-relaxed">{f.a}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /* ─── Footer ──────────────────────────────────────────────────────────────── */
 function Footer() {
   return (
@@ -565,6 +659,15 @@ function Footer() {
         >
           Cassette — Put your feelings on tape.
         </p>
+        <div className="flex justify-center gap-4 mt-2 text-[11px] font-mono text-[#8E8E93]">
+          <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
+          <span>·</span>
+          <Link href="/terms" className="hover:underline">Terms of Service</Link>
+          <span>·</span>
+          <Link href="/shelf" className="hover:underline">Public Shelf</Link>
+          <span>·</span>
+          <Link href="/developer" className="hover:underline text-[#a73c2e] font-semibold">Developer Tape</Link>
+        </div>
       </div>
     </footer>
   );
@@ -702,6 +805,7 @@ export default function HomepageClient({ tapes }: HomepageClientProps) {
         {/* ── HOW IT WORKS (Below shelf) ─────────────────────────────────────── */}
         <HowItWorksSection />
         <FinalCtaSection />
+        <FAQSection />
       </main>
 
       <Footer />

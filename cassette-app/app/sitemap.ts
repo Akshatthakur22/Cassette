@@ -7,7 +7,7 @@ import { MetadataRoute } from "next";
 import { prisma } from "@/app/lib/prisma";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const domain = process.env.NEXT_PUBLIC_DOMAIN || "https://cassette.fm";
+  const domain = process.env.NEXT_PUBLIC_DOMAIN || "https://cassette-share.vercel.app";
 
   try {
     // Fetch all public tapes
@@ -52,6 +52,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         lastModified: new Date(),
         changeFrequency: "monthly" as const,
         priority: 0.8,
+      },
+      {
+        url: `${domain}/developer`,
+        lastModified: new Date(),
+        changeFrequency: "monthly" as const,
+        priority: 0.8,
+      },
+      {
+        url: `${domain}/privacy`,
+        lastModified: new Date(),
+        changeFrequency: "monthly" as const,
+        priority: 0.5,
+      },
+      {
+        url: `${domain}/terms`,
+        lastModified: new Date(),
+        changeFrequency: "monthly" as const,
+        priority: 0.5,
       },
     ];
 

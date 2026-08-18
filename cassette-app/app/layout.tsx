@@ -4,13 +4,27 @@ import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_DOMAIN || "https://cassette-share.vercel.app"),
   title: "CASSETTE — Put your feelings on tape.",
   description:
-    "A no-signup digital mixtape. Pick songs, write why they matter, send a link.",
+    "A no-signup digital mixtape platform. Pick songs from YouTube, record voice notes, write handwritten liner notes, and share retro 3D tapes.",
+  alternates: {
+    canonical: "./",
+  },
   openGraph: {
-    title: "CASSETTE",
-    description: "A tape was made for you ❤️",
+    title: "CASSETTE — Interactive Digital Mixtape Maker",
+    description: "Put your feelings on tape. A no-signup 3D digital mixtape gift creator.",
+    url: "https://cassette-share.vercel.app",
+    siteName: "CASSETTE",
+    locale: "en_US",
     type: "website",
+    images: [{ url: "/api/og-image?title=CASSETTE&sender=Someone&recipient=You&style=classic", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CASSETTE — Put your feelings on tape",
+    description: "Send an interactive retro 3D mixtape link to someone special.",
+    images: ["/api/og-image?title=CASSETTE&sender=Someone&recipient=You&style=classic"],
   },
   robots: { index: true, follow: true },
   manifest: "/manifest.json",
@@ -46,28 +60,55 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const webAppSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    name: "CASSETTE",
+    description: "A no-signup digital mixtape platform for creating retro 3D interactive tapes.",
+    url: "https://cassette-share.vercel.app",
+    applicationCategory: "MusicApplication",
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    image: "https://cassette-share.vercel.app/api/og-image",
+    author: {
+      "@type": "Person",
+      name: "Akshat Thakur",
+      url: "https://cassette-share.vercel.app/developer",
+    },
+  };
+
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Cassette Digital Mixtape",
+    url: "https://cassette-share.vercel.app",
+    logo: "https://cassette-share.vercel.app/api/og-image",
+    founder: {
+      "@type": "Person",
+      name: "Akshat Thakur",
+    },
+    sameAs: [
+      "https://github.com/akshatthakur22",
+      "https://cassette-share.vercel.app/developer",
+      "https://mailmycertificate.tech",
+      "https://priyasarvutthan.org",
+    ],
+  };
+
   return (
     <html lang="en" className="h-full">
       <head>
         {/* Structured data for search engines */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
-              "@context": "https://schema.org",
-              "@type": "WebApplication",
-              name: "CASSETTE",
-              description: "A no-signup digital mixtape platform",
-              url: "https://cassette.fm",
-              applicationCategory: "MusicApplication",
-              offers: {
-                "@type": "Offer",
-                price: "0",
-                priceCurrency: "USD",
-              },
-              image: "https://cassette.fm/api/og-image",
-            }),
-          }}
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(webAppSchema) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
         <link
           rel="icon"

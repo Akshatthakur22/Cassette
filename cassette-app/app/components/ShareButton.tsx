@@ -21,7 +21,7 @@ export default function ShareButton({ title, senderName, publicId, tapeId, recip
 
   const domain =
     process.env.NEXT_PUBLIC_DOMAIN ||
-    (typeof window !== "undefined" ? window.location.origin : "https://cassette.fm");
+    (typeof window !== "undefined" ? window.location.origin : "https://cassette-share.vercel.app");
   const tapeUrl = `${domain}/t/${publicId}`;
   const shareText = `A tape was made for me ❤️ — from ${senderName}`;
 

@@ -13,7 +13,7 @@ interface QRCodeShareProps {
 export function QRCodeShare({ publicId, tapeName, size = 300 }: QRCodeShareProps) {
   const [copied, setCopied] = useState(false);
   const qrUrl = getQuickQRCodeUrl(publicId, size);
-  const tapeUrl = `${process.env.NEXT_PUBLIC_DOMAIN || "https://cassette.fm"}/t/${publicId}`;
+  const tapeUrl = `${process.env.NEXT_PUBLIC_DOMAIN || "https://cassette-share.vercel.app"}/t/${publicId}`;
 
   const handleDownload = async () => {
     try {

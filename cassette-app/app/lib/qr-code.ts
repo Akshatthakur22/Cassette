@@ -15,7 +15,7 @@ export interface QRCodeData {
  * Generate QR code URL for tape sharing
  */
 export function generateTapeQRCodeUrl(publicId: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_DOMAIN || "https://cassette.fm";
+  const baseUrl = process.env.NEXT_PUBLIC_DOMAIN || "https://cassette-share.vercel.app";
   return `${baseUrl}/t/${publicId}`;
 }
 
