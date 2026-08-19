@@ -86,14 +86,6 @@ export async function POST(request: NextRequest) {
       duration,
     });
 
-    // Save audio file to public folder
-    const voiceDir = join(process.cwd(), "public", "voice-recordings");
-    await mkdir(voiceDir, { recursive: true });
-    
-    const filename = `${trackId}.webm`;
-    const filepath = join(voiceDir, filename);
-    const fileUrl = `/voice-recordings/${filename}`;
-
     const existingVoiceTrack = await prisma.tapeTrack.findFirst({
       where: { tapeId, provider: "voice" },
       select: {
@@ -104,20 +96,34 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (existingVoiceTrack?.providerTrackId && existingVoiceTrack.providerTrackId !== trackId) {
-      const previousPath = join(voiceDir, `${existingVoiceTrack.providerTrackId}.webm`);
-      try {
-        await unlink(previousPath);
-      } catch {
-        // Ignore cleanup failures; a missing file is fine.
+    // Save audio file to public folder if writable (local dev), otherwise fallback to base64 Data URL (Vercel serverless)
+    const filename = `${trackId}.webm`;
+    let fileUrl = `/voice-recordings/${filename}`;
+    const mimeType = file.type || "audio/webm";
+    const base64Data = `data:${mimeType};base64,${Buffer.from(buffer).toString("base64")}`;
+
+    try {
+      const voiceDir = join(process.cwd(), "public", "voice-recordings");
+      await mkdir(voiceDir, { recursive: true });
+      const filepath = join(voiceDir, filename);
+
+      if (existingVoiceTrack?.providerTrackId && existingVoiceTrack.providerTrackId !== trackId && !existingVoiceTrack.providerTrackId.startsWith("data:")) {
+        const previousPath = join(voiceDir, `${existingVoiceTrack.providerTrackId}.webm`);
+        try {
+          await unlink(previousPath);
+        } catch {
+          // Ignore cleanup failures
+        }
       }
+
+      await writeFile(filepath, Buffer.from(buffer));
+      console.log("[voice-messages/upload] Audio file saved to disk:", filepath);
+    } catch (fsError) {
+      console.warn("[voice-messages/upload] Disk write skipped (serverless read-only environment), using base64 data URL:", fsError);
+      fileUrl = base64Data;
     }
 
-    await writeFile(filepath, Buffer.from(buffer));
-    console.log("[voice-messages/upload] Audio file saved:", {
-      path: filepath,
-      url: fileUrl,
-    });
+    const providerTrackId = fileUrl.startsWith("data:") ? fileUrl : trackId;
 
     const voiceTrackData = {
       tapeId,
@@ -126,7 +132,7 @@ export async function POST(request: NextRequest) {
       title: `Voice Recording - ${new Date().toLocaleTimeString()}`,
       artist: "You",
       provider: "voice",
-      providerTrackId: trackId,
+      providerTrackId,
       durationSec: duration,
       thumbnailUrl: null,
       personalNote: null,
