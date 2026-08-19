@@ -22,7 +22,7 @@ import type { TapeWithTracks, TrackRow } from "@/app/lib/types";
 import { formatDuration } from "@/app/lib/fake-data";
 import { useReduceMotion } from "@/app/lib/use-reduce-motion";
 import { useWakeLock } from "@/app/lib/useWakeLock";
-import { useMediaSession } from "@/app/lib/useMediaSession";
+import { MediaSessionInit } from "@/lib/playback/MediaSessionInit";
 import { getStableImageNumber } from "@/app/lib/accessibility";
 
 interface Props {
@@ -320,6 +320,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
       className="relative min-h-screen overflow-y-auto overflow-x-hidden"
       style={{ background: "#FBFAF7", scrollBehavior: "smooth" }}
     >
+      <MediaSessionInit />
       {/* Background decorative image */}
       <BackgroundImage
         imageNumber={getStableImageNumber(tape.id, 20)}

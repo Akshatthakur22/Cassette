@@ -6,25 +6,20 @@ import { type Track, formatDuration } from "@/app/lib/fake-data";
 import { playClickSound, playSkipSound, playSeekSound } from "@/app/lib/sounds";
 import { trackClientEvent, EVENTS as CLIENT_EVENTS } from "@/app/lib/client-posthog";
 import { updateBackgroundPlaybackState, initBackgroundPlayback } from "@/app/lib/background-playback";
-import { usePlaybackController } from "@/app/lib/usePlaybackController";
-
-declare global {
-  interface Window {
-    YT?: any;
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
+import { playbackController } from "@/lib/playback/PlaybackController";
+import { usePlaybackState } from "@/lib/playback/usePlaybackState";
+import { PlaybackTrack } from "@/lib/playback/types";
 
 interface PlayerBarProps {
   tracks: Track[];
   currentIndex: number;
-  isPlaying: boolean;
-  progress: number;
-  onPlay: () => void;
-  onPause: () => void;
-  onNext: () => void;
-  onPrev: () => void;
-  onSeek: (ratio: number) => void;
+  isPlaying?: boolean;
+  progress?: number;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
+  onSeek?: (ratio: number) => void;
   onTrackSelect?: (index: number) => void;
   onTimeUpdate?: (elapsedSec: number, durationSec: number) => void;
   accentColor?: string;
@@ -215,14 +210,12 @@ function HardwareButton({
   );
 }
 
-/* ─── Track position pill dots ───────────────────────────────────────────── */
-
 /* ─── Main PlayerBar ─────────────────────────────────────────────────────── */
 export default function PlayerBar({
   tracks,
   currentIndex,
-  isPlaying,
-  progress,
+  isPlaying: propIsPlaying,
+  progress: propProgress,
   onPlay,
   onPause,
   onNext,
@@ -234,59 +227,103 @@ export default function PlayerBar({
 }: PlayerBarProps) {
   const [showVideo, setShowVideo] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-
-  // Centralized Playback Controller
-  const controller = usePlaybackController({
-    tracks: tracks.map((t) => ({
-      id: t.id,
-      title: t.title,
-      artist: t.artist,
-      thumbnailUrl: t.thumbnailUrl,
-      provider: t.provider ?? "youtube",
-      providerTrackId: t.providerTrackId,
-      durationSec: t.durationSec,
-      personalNote: t.personalNote,
-      side: t.side as "A" | "B",
-    })),
-    initialIndex: currentIndex,
-    playerDivId: "yt-player-cassette",
-    onTrackChange: (idx) => onTrackSelect?.(idx),
-  });
-
-  const track = controller.currentTrack || tracks[currentIndex];
-  const activeIsPlaying = isPlaying || controller.isPlaying;
-  const activeDuration = controller.duration || track?.durationSec || 0;
-  const activeProgress = isDragging ? progress : (controller.progress || progress);
-  const playerDivId = controller.playerDivId;
-  const audioRef = controller.audioRef;
-  const trackWarning = controller.trackWarning;
+  const playbackState = usePlaybackState();
 
   useEffect(() => {
     initBackgroundPlayback();
   }, []);
 
-  // Sync parent when controller updates time
+  // Map incoming tracks to PlaybackTrack format
+  const mappedQueue: PlaybackTrack[] = tracks.map((t) => ({
+    id: t.id,
+    provider: t.provider ?? "youtube",
+    providerTrackId: t.providerTrackId,
+    title: t.title,
+    artist: t.artist,
+    artworkUrl: t.thumbnailUrl,
+    side: (t.side as "A" | "B") || "A",
+    durationSec: t.durationSec,
+    personalNote: t.personalNote,
+  }));
+
+  const activeTrack = playbackState.currentTrack || mappedQueue[currentIndex] || null;
+  const isPlaying = playbackState.isPlaying;
+  const currentTime = playbackState.currentTime;
+  const duration = playbackState.duration || activeTrack?.durationSec || 0;
+  const progress = isDragging
+    ? propProgress ?? (duration > 0 ? currentTime / duration : 0)
+    : duration > 0
+    ? currentTime / duration
+    : propProgress ?? 0;
+
+  // Sync state to callbacks & background playback helper
   useEffect(() => {
-    if (controller.currentTime >= 0 && activeDuration > 0) {
-      onTimeUpdate?.(controller.currentTime, activeDuration);
-      if (track) {
+    if (currentTime >= 0 && duration > 0) {
+      onTimeUpdate?.(currentTime, duration);
+      if (activeTrack) {
         updateBackgroundPlaybackState(
-          track.providerTrackId,
-          controller.currentTime,
-          activeDuration,
-          activeIsPlaying
+          activeTrack.providerTrackId,
+          currentTime,
+          duration,
+          isPlaying
         );
       }
     }
-  }, [controller.currentTime, activeDuration, track, activeIsPlaying, onTimeUpdate]);
+  }, [currentTime, duration, activeTrack, isPlaying, onTimeUpdate]);
+
+  // Sync track selection with controller if changed externally
+  const currentTrackIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const targetTrack = mappedQueue[currentIndex];
+    if (targetTrack && targetTrack.id !== currentTrackIdRef.current) {
+      currentTrackIdRef.current = targetTrack.id;
+      playbackController.setQueue(mappedQueue, currentIndex);
+    }
+  }, [currentIndex, mappedQueue]);
+
+  // Keyboard shortcut listener (Spacebar = toggle play/pause, Arrow keys = skip/seek)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        playClickSound(true);
+        if (isPlaying) {
+          playbackController.pause();
+          onPause?.();
+        } else {
+          playbackController.play();
+          onPlay?.();
+        }
+      } else if (e.code === "ArrowRight" && e.shiftKey) {
+        e.preventDefault();
+        playSkipSound(true);
+        playbackController.next();
+        onNext?.();
+      } else if (e.code === "ArrowLeft" && e.shiftKey) {
+        e.preventDefault();
+        playSkipSound(true);
+        playbackController.previous();
+        onPrev?.();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlaying, onPlay, onPause, onNext, onPrev]);
 
   // ── Explicit Seek Handler (User-Initiated Only) ─────────────────────────
   const handleExplicitSeek = useCallback(
     (ratio: number) => {
-      onSeek(ratio);
-      controller.seekToRatio(ratio);
+      const targetSec = ratio * duration;
+      onSeek?.(ratio);
+      playbackController.seek(targetSec);
     },
-    [onSeek, controller]
+    [duration, onSeek]
   );
 
   // ── Scrubber interaction ──────────────────────────────────────────────────
@@ -300,7 +337,11 @@ export default function PlayerBar({
     playSeekSound(true);
     scrubAt(e.clientX, rect);
     const handleMove = (ev: MouseEvent) => scrubAt(ev.clientX, rect);
-    const handleUp = () => { setIsDragging(false); window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp); };
+    const handleUp = () => {
+      setIsDragging(false);
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
   }
@@ -310,14 +351,12 @@ export default function PlayerBar({
     scrubAt(e.touches[0].clientX, rect);
   }
 
-  if (!track) return null;
+  if (!activeTrack) return null;
 
-  const displayDuration = activeDuration;
-  const elapsed = Math.round(activeProgress * displayDuration);
-  const lcdText = trackWarning
-    ? trackWarning
-    : `${track.artist ? `${track.artist} – ` : ""}${track.title}    ${formatDuration(elapsed)} / ${formatDuration(displayDuration)}`;
-  const sideLabel = track.side === "B" ? "B" : "A";
+  const displayDuration = duration;
+  const elapsed = Math.round(currentTime);
+  const lcdText = `${activeTrack.artist ? `${activeTrack.artist} – ` : ""}${activeTrack.title}    ${formatDuration(elapsed)} / ${formatDuration(displayDuration)}`;
+  const sideLabel = activeTrack.side === "B" ? "B" : "A";
 
   return (
     <motion.div
@@ -344,16 +383,16 @@ export default function PlayerBar({
           style={{ height: 4, background: "#0D0A07" }}
           onMouseDown={handleScrubberMouseDown}
           onTouchStart={handleScrubberTouch}
-          onTouchMove={e => scrubAt(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
+          onTouchMove={(e) => scrubAt(e.touches[0].clientX, e.currentTarget.getBoundingClientRect())}
           role="slider"
           aria-label="Track progress"
           aria-valuenow={Math.round(progress * 100)}
           aria-valuemin={0}
           aria-valuemax={100}
           tabIndex={0}
-          onKeyDown={e => {
+          onKeyDown={(e) => {
             if (e.key === "ArrowRight") handleExplicitSeek(Math.min(1, progress + 0.01));
-            if (e.key === "ArrowLeft")  handleExplicitSeek(Math.max(0, progress - 0.01));
+            if (e.key === "ArrowLeft") handleExplicitSeek(Math.max(0, progress - 0.01));
           }}
         >
           {/* Fill */}
@@ -372,7 +411,6 @@ export default function PlayerBar({
             style={{ left: `calc(${progress * 100}% - 7px)`, width: 14, height: 14 }}
             animate={{ scale: isDragging ? 1 : 0, opacity: isDragging ? 1 : 0 }}
             whileHover={{ scale: 1 }}
-            // always show on hover via group
             initial={false}
           >
             <div
@@ -392,41 +430,49 @@ export default function PlayerBar({
 
         {/* ── MAIN DECK ROW ─────────────────────────────────────────── */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 px-2.5 sm:px-4 py-2 sm:py-2.5 max-w-3xl mx-auto">
-
           {/* LEFT — Play/Pause + Stop */}
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="lg"
               onClick={() => {
                 playClickSound(true);
-                if (activeIsPlaying) {
-                  controller.pause();
-                  onPause();
+                if (isPlaying) {
+                  playbackController.pause();
+                  onPause?.();
                 } else {
-                  controller.play();
-                  onPlay();
+                  if (activeTrack) {
+                    playbackController.playTrack(activeTrack, mappedQueue);
+                  } else {
+                    playbackController.play();
+                  }
+                  onPlay?.();
                 }
               }}
-              aria-label={activeIsPlaying ? "Pause" : "Play"}
-              active={activeIsPlaying}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              active={isPlaying}
               color={accentColor}
             >
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={activeIsPlaying ? "pause" : "play"}
+                  key={isPlaying ? "pause" : "play"}
                   initial={{ opacity: 0, scale: 0.55 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.55 }}
                   transition={{ duration: 0.09 }}
                 >
-                  {activeIsPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+                  {isPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
                 </motion.div>
               </AnimatePresence>
             </HardwareButton>
 
             <HardwareButton
               size="sm"
-              onClick={() => { playClickSound(true); onPause(); handleExplicitSeek(0); }}
+              onClick={() => {
+                playClickSound(true);
+                playbackController.pause();
+                playbackController.seek(0);
+                onPause?.();
+              }}
               aria-label="Stop"
               color="#C03030"
               active={!isPlaying && progress === 0}
@@ -453,7 +499,7 @@ export default function PlayerBar({
             {/* Ticker row: cursor + badge + scrolling text + VU meter */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={track.id}
+                key={activeTrack.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -477,7 +523,7 @@ export default function PlayerBar({
                 />
 
                 {/* SIDE / VOICE badge */}
-                {track.provider === "voice" ? (
+                {activeTrack.provider === "voice" ? (
                   <span
                     className="flex items-center gap-0.5"
                     style={{
@@ -525,7 +571,11 @@ export default function PlayerBar({
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="md"
-              onClick={() => { playSkipSound(true); onPrev(); }}
+              onClick={() => {
+                playSkipSound(true);
+                playbackController.previous();
+                onPrev?.();
+              }}
               aria-label="Previous track"
               title="Previous"
             >
@@ -534,7 +584,11 @@ export default function PlayerBar({
 
             <HardwareButton
               size="md"
-              onClick={() => { playSkipSound(true); onNext(); }}
+              onClick={() => {
+                playSkipSound(true);
+                playbackController.next();
+                onNext?.();
+              }}
               aria-label="Next track"
               title="Next"
             >
@@ -543,7 +597,7 @@ export default function PlayerBar({
 
             {/* Video toggle */}
             <motion.button
-              onClick={() => setShowVideo(v => !v)}
+              onClick={() => setShowVideo((v) => !v)}
               aria-label={showVideo ? "Hide video" : "Show video"}
               title={showVideo ? "Hide video" : "Show video"}
               whileTap={{ scale: 0.88, y: 1 }}
@@ -560,10 +614,7 @@ export default function PlayerBar({
           </div>
 
           {/* WERK branding — right edge */}
-          <div
-            className="flex-shrink-0 hidden sm:flex items-end pb-0.5"
-            aria-hidden="true"
-          >
+          <div className="flex-shrink-0 hidden sm:flex items-end pb-0.5" aria-hidden="true">
             <span
               style={{
                 fontSize: "8px",
@@ -583,7 +634,7 @@ export default function PlayerBar({
 
         {/* ── PERSONAL NOTE STRIP ──────────────────────────────────── */}
         <AnimatePresence>
-          {isPlaying && track.personalNote && (
+          {isPlaying && activeTrack.personalNote && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
@@ -593,12 +644,7 @@ export default function PlayerBar({
               style={{ borderTop: "1px solid rgba(255,255,255,0.035)" }}
             >
               <div className="flex items-start gap-2.5 px-4 py-2 max-w-3xl mx-auto">
-                {/* Note icon */}
-                <div
-                  className="flex-shrink-0 mt-0.5"
-                  aria-hidden="true"
-                  style={{ opacity: 0.5 }}
-                >
+                <div className="flex-shrink-0 mt-0.5" aria-hidden="true" style={{ opacity: 0.5 }}>
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
                     <path d="M1 2.5h8M1 5h8M1 7.5h5" stroke="#8A9860" strokeWidth="1.2" strokeLinecap="round" />
                   </svg>
@@ -614,7 +660,7 @@ export default function PlayerBar({
                     minWidth: 0,
                   }}
                 >
-                  &ldquo;{track.personalNote}&rdquo;
+                  &ldquo;{activeTrack.personalNote}&rdquo;
                 </p>
               </div>
             </motion.div>
@@ -622,62 +668,32 @@ export default function PlayerBar({
         </AnimatePresence>
       </div>
 
-      {/* ── YOUTUBE PLAYER / AUDIO PLAYER ────────────────────────────────────────── */}
+      {/* ── YOUTUBE PLAYER CONTAINER ────────────────────────────────────────── */}
       <div
         style={{
           background: "#0E0C08",
-          borderTop: (showVideo || track?.provider === "voice") ? "1px solid rgba(255,255,255,0.035)" : "none",
+          borderTop: showVideo ? "1px solid rgba(255,255,255,0.035)" : "none",
           overflow: "hidden",
-          maxHeight: (showVideo || track?.provider === "voice") ? 220 : 0,
+          maxHeight: showVideo ? 220 : 0,
           transition: "max-height 0.35s cubic-bezier(0.22,1,0.36,1)",
         }}
       >
-        <div
-          className="w-full max-w-xs mx-auto"
-          style={{ aspectRatio: track?.provider === "voice" ? "auto" : "16/9", padding: "8px 12px" }}
-        >
-          {/* YouTube player */}
+        <div className="w-full max-w-xs mx-auto" style={{ aspectRatio: "16/9", padding: "8px 12px" }}>
+          {/* YouTube player iframe target container */}
           <div
-            id={playerDivId}
+            id="yt-player-cassette"
             style={{
-              width: "100%", height: "100%",
-              minWidth: 180, minHeight: 102,
+              width: "100%",
+              height: "100%",
+              minWidth: 180,
+              minHeight: 102,
               borderRadius: 8,
               overflow: "hidden",
               background: "#100E08",
-              display: track?.provider === "voice" ? "none" : "block",
             }}
           />
-          
-          {/* Audio player for voice recordings */}
-          {track?.provider === "voice" && (
-            <audio
-              ref={audioRef}
-              style={{
-                width: "100%",
-                height: "auto",
-                display: "block",
-              }}
-              controls
-              controlsList="nodownload"
-              onEnded={() => {
-                console.log("[PlayerBar] Voice recording ended");
-                onPause();
-                onSeek(0);
-              }}
-              onLoadedMetadata={() => {
-                console.log("[PlayerBar] Voice recording loaded:", {
-                  duration: audioRef.current?.duration,
-                });
-              }}
-              onError={(e) => {
-                console.error("[PlayerBar] Audio error:", e);
-              }}
-            />
-          )}
         </div>
       </div>
-
     </motion.div>
   );
 }

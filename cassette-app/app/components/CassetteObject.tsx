@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { usePlaybackState } from "@/lib/playback/usePlaybackState";
 
 export type CassetteSide = "A" | "B";
 export type TapeColorKey = string;
 
 interface CassetteObjectProps {
   side: CassetteSide;
-  isPlaying: boolean;
+  isPlaying?: boolean;
   title: string;
   recipientName: string;
   senderName: string;
@@ -63,15 +64,23 @@ export default function CassetteObject({
   style = "cream",
   onFlipSide,
   className = "",
-  progress = 0,
+  progress,
   showFlipButton = true,
 }: CassetteObjectProps) {
   useCassetteFont();
+  const playbackState = usePlaybackState();
+
+  const activeIsPlaying = isPlaying ?? playbackState.isPlaying;
+  const activeDuration = playbackState.duration || 0;
+  const computedProgress =
+    activeDuration > 0
+      ? playbackState.currentTime / activeDuration
+      : progress ?? 0;
 
   const [isHydrated, setIsHydrated] = useState(false);
   const [flipping, setFlipping] = useState(false);
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const [counter, setCounter] = useState(Math.floor(progress * 999));
+  const [counter, setCounter] = useState(Math.floor(computedProgress * 999));
   const [localMode, setLocalMode] = useState<"stopped" | "playing" | "rewind" | "ff">("stopped");
 
   const rafRef = useRef<number | null>(null);
@@ -83,17 +92,17 @@ export default function CassetteObject({
   const [, forceTick] = useState(0);
 
   const theme = TAPE_THEMES[style] ?? TAPE_THEMES.cream;
-  const powerOn = isPlaying || localMode === "playing";
-  const mode = isPlaying ? "playing" : localMode;
+  const powerOn = activeIsPlaying || localMode === "playing";
+  const mode = activeIsPlaying ? "playing" : localMode;
 
   useEffect(() => {
     setIsHydrated(true);
   }, []);
 
   useEffect(() => {
-    setCounter(Math.floor(progress * 999));
-    windRef.current = Math.max(0.1, Math.min(0.9, 0.15 + progress * 0.7));
-  }, [progress]);
+    setCounter(Math.floor(computedProgress * 999));
+    windRef.current = Math.max(0.1, Math.min(0.9, 0.15 + computedProgress * 0.7));
+  }, [computedProgress]);
 
   useEffect(() => {
     if (mode === "stopped") {
