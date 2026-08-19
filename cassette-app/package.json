@@ -13,6 +13,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.0",
     "@prisma/client": "^5.22.0",
     "framer-motion": "^11.18.2",
     "nanoid": "^5.1.16",
@@ -25,6 +26,9 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

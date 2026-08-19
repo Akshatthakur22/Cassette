@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cassette</string>
+    <string name="title_activity_main">Cassette</string>
+    <string name="package_name">fm.cassette.app</string>
+    <string name="custom_url_scheme">fm.cassette.app</string>
+</resources>
