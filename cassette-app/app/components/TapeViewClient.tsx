@@ -101,9 +101,12 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
       return;
     }
     try {
-      const stored = sessionStorage.getItem(`tape_opened_${tape.publicId || tape.id}`);
-      if (stored === "true") {
+      const openedStored = sessionStorage.getItem(`tape_opened_${tape.publicId || tape.id}`);
+      const insertedStored = sessionStorage.getItem(`tape_inserted_${tape.publicId || tape.id}`);
+      if (openedStored === "true") {
         setOpened(true);
+      }
+      if (insertedStored === "true") {
         setInserted(true);
       }
     } catch {}
@@ -111,7 +114,6 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
 
   const handleGateOpen = useCallback(() => {
     setOpened(true);
-    setInserted(true);
     try {
       sessionStorage.setItem(`tape_opened_${tape.publicId || tape.id}`, "true");
     } catch {}
