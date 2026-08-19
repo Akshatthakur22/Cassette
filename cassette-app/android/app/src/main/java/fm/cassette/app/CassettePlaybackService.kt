@@ -23,7 +23,11 @@ class CassettePlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onCreate starting, serviceId=${System.identityHashCode(this)}")
+        val sId = System.identityHashCode(this)
+        Log.d(TAG, "[SERVICE-LIFECYCLE] onCreate starting, serviceId=$sId")
+        CassetteDiagnostics.serviceAlive = true
+        CassetteDiagnostics.serviceId = sId
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", "onCreate: serviceId=$sId")
 
         val audioAttributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -37,8 +41,12 @@ class CassettePlaybackService : MediaSessionService() {
             .build()
 
         player = exoPlayer
+        val pId = System.identityHashCode(exoPlayer)
+        CassetteDiagnostics.playerAlive = true
+        CassetteDiagnostics.playerId = pId
 
-        Log.d(TAG, "[SERVICE-EXOPLAYER] ExoPlayer instance created, playerId=${System.identityHashCode(exoPlayer)}")
+        Log.d(TAG, "[SERVICE-EXOPLAYER] ExoPlayer instance created, playerId=$pId")
+        CassetteDiagnostics.log("SERVICE-EXOPLAYER", "ExoPlayer created, playerId=$pId")
 
         exoPlayer.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -49,14 +57,27 @@ class CassettePlaybackService : MediaSessionService() {
                     Player.STATE_ENDED -> "STATE_ENDED"
                     else -> "UNKNOWN($playbackState)"
                 }
-                Log.d(TAG, "[SERVICE-EXOPLAYER] onPlaybackStateChanged -> $stateStr (isPlaying=${exoPlayer.isPlaying}, playWhenReady=${exoPlayer.playWhenReady}, pos=${exoPlayer.currentPosition}ms, dur=${exoPlayer.duration}ms, playerId=${System.identityHashCode(exoPlayer)})")
+                CassetteDiagnostics.playerState = stateStr
+                CassetteDiagnostics.currentPositionMs = exoPlayer.currentPosition
+                CassetteDiagnostics.durationMs = if (exoPlayer.duration > 0) exoPlayer.duration else 0L
+
+                val msg = "onPlaybackStateChanged -> $stateStr (isPlaying=${exoPlayer.isPlaying}, playWhenReady=${exoPlayer.playWhenReady}, pos=${exoPlayer.currentPosition}ms, dur=${exoPlayer.duration}ms, playerId=$pId)"
+                Log.d(TAG, "[SERVICE-EXOPLAYER] $msg")
+                CassetteDiagnostics.log("SERVICE-EXOPLAYER", msg)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                Log.d(TAG, "[SERVICE-EXOPLAYER] onIsPlayingChanged -> isPlaying=$isPlaying (track=${exoPlayer.currentMediaItem?.mediaId}, playWhenReady=${exoPlayer.playWhenReady}, pos=${exoPlayer.currentPosition}ms, playerId=${System.identityHashCode(exoPlayer)})")
+                CassetteDiagnostics.isPlaying = isPlaying
+                CassetteDiagnostics.currentPositionMs = exoPlayer.currentPosition
+                CassetteDiagnostics.currentTrackId = exoPlayer.currentMediaItem?.mediaId
+
+                val msg = "onIsPlayingChanged -> isPlaying=$isPlaying (track=${exoPlayer.currentMediaItem?.mediaId}, playWhenReady=${exoPlayer.playWhenReady}, pos=${exoPlayer.currentPosition}ms, playerId=$pId)"
+                Log.d(TAG, "[SERVICE-EXOPLAYER] $msg")
+                CassetteDiagnostics.log("SERVICE-EXOPLAYER", msg)
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                CassetteDiagnostics.playWhenReady = playWhenReady
                 val reasonStr = when (reason) {
                     Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST -> "USER_REQUEST"
                     Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS -> "AUDIO_FOCUS_LOSS"
@@ -65,15 +86,22 @@ class CassettePlaybackService : MediaSessionService() {
                     Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM -> "END_OF_MEDIA_ITEM"
                     else -> "OTHER($reason)"
                 }
-                Log.d(TAG, "[SERVICE-EXOPLAYER] onPlayWhenReadyChanged -> playWhenReady=$playWhenReady, reason=$reasonStr")
+                val msg = "onPlayWhenReadyChanged -> playWhenReady=$playWhenReady, reason=$reasonStr"
+                Log.d(TAG, "[SERVICE-EXOPLAYER] $msg")
+                CassetteDiagnostics.log("SERVICE-EXOPLAYER", msg)
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                Log.d(TAG, "[SERVICE-EXOPLAYER] onMediaItemTransition -> trackId=${mediaItem?.mediaId}, title=${mediaItem?.mediaMetadata?.title}, reason=$reason")
+                CassetteDiagnostics.currentTrackId = mediaItem?.mediaId
+                val msg = "onMediaItemTransition -> trackId=${mediaItem?.mediaId}, title=${mediaItem?.mediaMetadata?.title}, reason=$reason"
+                Log.d(TAG, "[SERVICE-EXOPLAYER] $msg")
+                CassetteDiagnostics.log("SERVICE-EXOPLAYER", msg)
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                Log.e(TAG, "[SERVICE-EXOPLAYER] onPlayerError -> ${error.message}", error)
+                val msg = "onPlayerError -> ${error.message}"
+                Log.e(TAG, "[SERVICE-EXOPLAYER] $msg", error)
+                CassetteDiagnostics.log("SERVICE-ERROR", "$msg\nStack:\n${Log.getStackTraceString(error)}")
             }
         })
 
@@ -93,32 +121,47 @@ class CassettePlaybackService : MediaSessionService() {
             .setSessionActivity(pendingIntent)
             .build()
 
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onCreate complete, MediaSession created with sessionId=${System.identityHashCode(mediaSession)}")
+        val sesId = System.identityHashCode(mediaSession)
+        Log.d(TAG, "[SERVICE-LIFECYCLE] onCreate complete, MediaSession created with sessionId=$sesId")
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", "MediaSession created, sessionId=$sesId")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onStartCommand called: intent=$intent, flags=$flags, startId=$startId")
+        val msg = "onStartCommand: intent=$intent, flags=$flags, startId=$startId"
+        Log.d(TAG, "[SERVICE-LIFECYCLE] $msg")
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", msg)
         return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onGetSession requested by package: ${controllerInfo.packageName}, uid: ${controllerInfo.uid}")
+        val msg = "onGetSession requested by package: ${controllerInfo.packageName}, uid: ${controllerInfo.uid}"
+        Log.d(TAG, "[SERVICE-LIFECYCLE] $msg")
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", msg)
         return mediaSession
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onTaskRemoved called")
         val currentP = player
         if (currentP == null || !currentP.playWhenReady || currentP.mediaItemCount == 0) {
-            Log.d(TAG, "[SERVICE-LIFECYCLE] Stopping self on task removed because not playing")
+            val msg = "onTaskRemoved: Stopping self because player not active"
+            Log.d(TAG, "[SERVICE-LIFECYCLE] $msg")
+            CassetteDiagnostics.log("SERVICE-LIFECYCLE", msg)
             stopSelf()
         } else {
-            Log.d(TAG, "[SERVICE-LIFECYCLE] Keeping service active during task removal because audio is playing")
+            val msg = "onTaskRemoved: Keeping service active because audio is playing"
+            Log.d(TAG, "[SERVICE-LIFECYCLE] $msg")
+            CassetteDiagnostics.log("SERVICE-LIFECYCLE", msg)
         }
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "[SERVICE-LIFECYCLE] onDestroy starting for serviceId=${System.identityHashCode(this)}\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val msg = "onDestroy starting for serviceId=${System.identityHashCode(this)}\nStack:\n$stack"
+        Log.d(TAG, "[SERVICE-LIFECYCLE] $msg")
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", msg)
+        CassetteDiagnostics.serviceAlive = false
+        CassetteDiagnostics.playerAlive = false
+
         mediaSession?.run {
             player.release()
             release()
@@ -126,6 +169,7 @@ class CassettePlaybackService : MediaSessionService() {
         }
         player = null
         Log.d(TAG, "[SERVICE-LIFECYCLE] onDestroy complete")
+        CassetteDiagnostics.log("SERVICE-LIFECYCLE", "onDestroy complete")
         super.onDestroy()
     }
 }

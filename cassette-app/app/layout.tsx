@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import ServiceWorkerRegistrar from "./components/ServiceWorkerRegistrar";
 import { PerformanceMonitor } from "./components/PerformanceMonitor";
+import { PlaybackDiagnosticsPanel } from "@/lib/playback/diagnostics/PlaybackDiagnosticsPanel";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_DOMAIN || "https://cassette-share.vercel.app"),
@@ -140,6 +141,7 @@ export default function RootLayout({
         </Script>
         <PerformanceMonitor />
         {children}
+        <PlaybackDiagnosticsPanel />
         <ServiceWorkerRegistrar />
       </body>
     </html>

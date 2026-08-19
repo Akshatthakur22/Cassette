@@ -11,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -35,22 +36,27 @@ class CassettePlaybackPlugin : Plugin() {
     override fun load() {
         super.load()
         Log.d(TAG, "[PLUGIN-LIFECYCLE] load called")
+        CassetteDiagnostics.log("PLUGIN-LIFECYCLE", "load called")
         initMediaController()
     }
 
     private fun initMediaController(onReady: ((MediaController) -> Unit)? = null) {
         val context: Context = context ?: run {
             Log.e(TAG, "[PLUGIN-CONTROLLER] Context is null during initMediaController")
+            CassetteDiagnostics.log("PLUGIN-CONTROLLER", "ERROR: Context is null")
             return
         }
 
         if (mediaController != null && mediaController?.isConnected == true) {
-            Log.d(TAG, "[PLUGIN-CONTROLLER] MediaController already connected, controllerId=${System.identityHashCode(mediaController)}")
+            val cId = System.identityHashCode(mediaController)
+            Log.d(TAG, "[PLUGIN-CONTROLLER] MediaController already connected, controllerId=$cId")
+            CassetteDiagnostics.controllerConnected = true
             onReady?.invoke(mediaController!!)
             return
         }
 
         Log.d(TAG, "[PLUGIN-CONTROLLER] Binding SessionToken to CassettePlaybackService...")
+        CassetteDiagnostics.log("PLUGIN-CONTROLLER", "Binding SessionToken to CassettePlaybackService...")
         val sessionToken = SessionToken(context, ComponentName(context, CassettePlaybackService::class.java))
         controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
         controllerFuture?.addListener({
@@ -58,14 +64,23 @@ class CassettePlaybackPlugin : Plugin() {
                 val controller = controllerFuture?.get()
                 if (controller != null && controller.isConnected) {
                     mediaController = controller
-                    Log.d(TAG, "[PLUGIN-CONTROLLER] MediaController connected, controllerId=${System.identityHashCode(controller)}, isPlaying=${controller.isPlaying}, pos=${controller.currentPosition}ms")
+                    val cId = System.identityHashCode(controller)
+                    CassetteDiagnostics.controllerConnected = true
+                    val msg = "MediaController connected, controllerId=$cId, isPlaying=${controller.isPlaying}, pos=${controller.currentPosition}ms"
+                    Log.d(TAG, "[PLUGIN-CONTROLLER] $msg")
+                    CassetteDiagnostics.log("PLUGIN-CONTROLLER", msg)
                     setupPlayerListener()
                     onReady?.invoke(controller)
                 } else {
                     Log.w(TAG, "[PLUGIN-CONTROLLER] MediaController future completed but controller is null or disconnected")
+                    CassetteDiagnostics.controllerConnected = false
+                    CassetteDiagnostics.log("PLUGIN-CONTROLLER", "WARNING: MediaController is null or disconnected")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "[PLUGIN-CONTROLLER] Error connecting MediaController: ${e.message}\n${Log.getStackTraceString(e)}")
+                val stack = Log.getStackTraceString(e)
+                Log.e(TAG, "[PLUGIN-CONTROLLER] Error connecting MediaController: ${e.message}\n$stack")
+                CassetteDiagnostics.controllerConnected = false
+                CassetteDiagnostics.log("PLUGIN-CONTROLLER", "ERROR connecting: ${e.message}\n$stack")
             }
         }, MoreExecutors.directExecutor())
     }
@@ -76,11 +91,20 @@ class CassettePlaybackPlugin : Plugin() {
         isListenerAttached = true
 
         Log.d(TAG, "[PLUGIN-CONTROLLER] Attaching Player.Listener to MediaController")
+        CassetteDiagnostics.log("PLUGIN-CONTROLLER", "Attached Player.Listener to MediaController")
+
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val posMs = player.currentPosition
                 val durMs = player.duration
-                Log.d(TAG, "[PLUGIN-EVENT] onIsPlayingChanged -> isPlaying=$isPlaying, pos=${posMs}ms, dur=${durMs}ms, trackId=${player.currentMediaItem?.mediaId}")
+                CassetteDiagnostics.isPlaying = isPlaying
+                CassetteDiagnostics.currentPositionMs = posMs
+                CassetteDiagnostics.durationMs = if (durMs > 0) durMs else 0L
+                CassetteDiagnostics.currentTrackId = player.currentMediaItem?.mediaId
+
+                val msg = "onIsPlayingChanged -> isPlaying=$isPlaying, pos=${posMs}ms, dur=${durMs}ms, trackId=${player.currentMediaItem?.mediaId}"
+                Log.d(TAG, "[PLUGIN-EVENT] $msg")
+                CassetteDiagnostics.log("PLUGIN-EVENT", msg)
 
                 val data = JSObject().apply {
                     put("type", if (isPlaying) "play" else "pause")
@@ -106,7 +130,10 @@ class CassettePlaybackPlugin : Plugin() {
                     Player.STATE_ENDED -> "STATE_ENDED"
                     else -> "UNKNOWN($playbackState)"
                 }
-                Log.d(TAG, "[PLUGIN-EVENT] onPlaybackStateChanged -> $stateName")
+                CassetteDiagnostics.playerState = stateName
+                val msg = "onPlaybackStateChanged -> $stateName"
+                Log.d(TAG, "[PLUGIN-EVENT] $msg")
+                CassetteDiagnostics.log("PLUGIN-EVENT", msg)
 
                 if (playbackState == Player.STATE_ENDED) {
                     val data = JSObject().apply {
@@ -127,7 +154,10 @@ class CassettePlaybackPlugin : Plugin() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                Log.d(TAG, "[PLUGIN-EVENT] onMediaItemTransition -> trackId=${mediaItem?.mediaId}, title=${mediaItem?.mediaMetadata?.title}, reason=$reason")
+                CassetteDiagnostics.currentTrackId = mediaItem?.mediaId
+                val msg = "onMediaItemTransition -> trackId=${mediaItem?.mediaId}, title=${mediaItem?.mediaMetadata?.title}, reason=$reason"
+                Log.d(TAG, "[PLUGIN-EVENT] $msg")
+                CassetteDiagnostics.log("PLUGIN-EVENT", msg)
                 if (mediaItem != null) {
                     val data = JSObject().apply {
                         put("type", "trackChanged")
@@ -147,6 +177,9 @@ class CassettePlaybackPlugin : Plugin() {
                 if (player != null && player.isPlaying) {
                     val posSec = player.currentPosition / 1000.0
                     val durSec = if (player.duration > 0) player.duration / 1000.0 else 0.0
+                    CassetteDiagnostics.currentPositionMs = player.currentPosition
+                    CassetteDiagnostics.durationMs = player.duration
+
                     val data = JSObject().apply {
                         put("type", "timeUpdate")
                         put("currentTime", posSec)
@@ -172,6 +205,7 @@ class CassettePlaybackPlugin : Plugin() {
             action(player)
         } else {
             Log.d(TAG, "[PLUGIN-CALL] MediaController not ready, awaiting connection...")
+            CassetteDiagnostics.log("PLUGIN-CALL", "MediaController not ready, awaiting connection...")
             initMediaController { controller ->
                 action(controller)
             }
@@ -186,7 +220,10 @@ class CassettePlaybackPlugin : Plugin() {
         val artist = call.getString("artist") ?: "Cassette"
         val artworkUrl = call.getString("artworkUrl")
 
-        Log.d(TAG, "[PLUGIN-CALL] play() called -> id=$trackId, url=$url, title=$title\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val callMsg = "play() called -> id=$trackId, url=$url, title=$title\nStack:\n$stack"
+        Log.d(TAG, "[PLUGIN-CALL] $callMsg")
+        CassetteDiagnostics.log("PLUGIN-CALL", callMsg)
 
         withController(call) { player ->
             val currentMediaId = player.currentMediaItem?.mediaId
@@ -194,10 +231,15 @@ class CassettePlaybackPlugin : Plugin() {
             val isPlayerIdleOrEnded = player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED
 
             if (isSameTrack && !isPlayerIdleOrEnded) {
-                Log.d(TAG, "[PLUGIN-CALL] Track $trackId is already loaded in player at ${player.currentPosition}ms. Calling player.play() without modifying media items.")
+                val msg = "Track $trackId is already loaded at ${player.currentPosition}ms. Calling player.play() without resetting position."
+                Log.d(TAG, "[PLUGIN-CALL] $msg")
+                CassetteDiagnostics.log("PLUGIN-CALL", msg)
                 player.play()
             } else if (!url.isNullOrEmpty()) {
-                Log.d(TAG, "[PLUGIN-CALL] Loading new track into ExoPlayer -> id=$trackId, url=$url")
+                val msg = "Loading new track into ExoPlayer -> id=$trackId, url=$url"
+                Log.d(TAG, "[PLUGIN-CALL] $msg")
+                CassetteDiagnostics.log("PLUGIN-CALL", msg)
+
                 val metadataBuilder = MediaMetadata.Builder()
                     .setTitle(title)
                     .setArtist(artist)
@@ -213,12 +255,14 @@ class CassettePlaybackPlugin : Plugin() {
                     .setMediaMetadata(metadataBuilder.build())
                     .build()
 
-                Log.d(TAG, "[PLUGIN-CALL] setMediaItem CALLED\n${Log.getStackTraceString(Throwable())}")
+                CassetteDiagnostics.log("PLUGIN-CALL", "setMediaItem called for $trackId\nStack:\n$stack")
                 player.setMediaItem(mediaItem)
                 player.prepare()
                 player.play()
             } else {
-                Log.d(TAG, "[PLUGIN-CALL] Resuming existing player state (no URL payload)")
+                val msg = "Resuming existing player state (no URL payload)"
+                Log.d(TAG, "[PLUGIN-CALL] $msg")
+                CassetteDiagnostics.log("PLUGIN-CALL", msg)
                 player.play()
             }
 
@@ -228,7 +272,10 @@ class CassettePlaybackPlugin : Plugin() {
 
     @PluginMethod
     fun pause(call: PluginCall) {
-        Log.d(TAG, "[PLUGIN-CALL] pause() CALLED\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val msg = "pause() CALLED\nStack:\n$stack"
+        Log.d(TAG, "[PLUGIN-CALL] $msg")
+        CassetteDiagnostics.log("PLUGIN-CALL", msg)
         withController(call) { player ->
             player.pause()
             call.resolve(JSObject().put("success", true))
@@ -238,7 +285,10 @@ class CassettePlaybackPlugin : Plugin() {
     @PluginMethod
     fun seek(call: PluginCall) {
         val seconds = call.getDouble("seconds") ?: 0.0
-        Log.d(TAG, "[PLUGIN-CALL] seek() CALLED to ${seconds}s\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val msg = "seek() CALLED to ${seconds}s\nStack:\n$stack"
+        Log.d(TAG, "[PLUGIN-CALL] $msg")
+        CassetteDiagnostics.log("PLUGIN-CALL", msg)
         withController(call) { player ->
             player.seekTo((seconds * 1000).toLong())
             call.resolve(JSObject().put("success", true))
@@ -248,6 +298,7 @@ class CassettePlaybackPlugin : Plugin() {
     @PluginMethod
     fun next(call: PluginCall) {
         Log.d(TAG, "[PLUGIN-CALL] next() CALLED")
+        CassetteDiagnostics.log("PLUGIN-CALL", "next() called")
         withController(call) { player ->
             if (player.hasNextMediaItem()) {
                 player.seekToNextMediaItem()
@@ -259,6 +310,7 @@ class CassettePlaybackPlugin : Plugin() {
     @PluginMethod
     fun previous(call: PluginCall) {
         Log.d(TAG, "[PLUGIN-CALL] previous() CALLED")
+        CassetteDiagnostics.log("PLUGIN-CALL", "previous() called")
         withController(call) { player ->
             if (player.currentPosition > 3000) {
                 player.seekTo(0)
@@ -273,7 +325,10 @@ class CassettePlaybackPlugin : Plugin() {
     fun setQueue(call: PluginCall) {
         val queueArray = call.getArray("queue")
         val index = call.getInt("index") ?: 0
-        Log.d(TAG, "[PLUGIN-CALL] setQueue() CALLED -> length=${queueArray?.length()}, index=$index\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val msg = "setQueue() CALLED -> length=${queueArray?.length()}, index=$index\nStack:\n$stack"
+        Log.d(TAG, "[PLUGIN-CALL] $msg")
+        CassetteDiagnostics.log("PLUGIN-CALL", msg)
 
         withController(call) { player ->
             if (queueArray != null && queueArray.length() > 0) {
@@ -307,9 +362,13 @@ class CassettePlaybackPlugin : Plugin() {
                             player.currentMediaItem?.mediaId == targetTrackId
 
                     if (isAlreadySet && player.playbackState != Player.STATE_IDLE) {
-                        Log.d(TAG, "[PLUGIN-CALL] Queue already matches player items. Skipping setMediaItems() reset.")
+                        val skipMsg = "Queue already matches player items. Skipping setMediaItems() reset."
+                        Log.d(TAG, "[PLUGIN-CALL] $skipMsg")
+                        CassetteDiagnostics.log("PLUGIN-CALL", skipMsg)
                     } else {
-                        Log.d(TAG, "[PLUGIN-CALL] setMediaItems CALLED with ${mediaItems.size} items\n${Log.getStackTraceString(Throwable())}")
+                        val setMsg = "setMediaItems CALLED with ${mediaItems.size} items\n$stack"
+                        Log.d(TAG, "[PLUGIN-CALL] $setMsg")
+                        CassetteDiagnostics.log("PLUGIN-CALL", setMsg)
                         player.setMediaItems(mediaItems, Math.max(0, Math.min(index, mediaItems.size - 1)), 0)
                         player.prepare()
                     }
@@ -326,7 +385,10 @@ class CassettePlaybackPlugin : Plugin() {
             val durSec = if (player.duration > 0) player.duration / 1000.0 else 0.0
             val currentTrackId = player.currentMediaItem?.mediaId
 
-            Log.d(TAG, "[PLUGIN-CALL] getState() query -> isPlaying=${player.isPlaying}, pos=${posSec}s, dur=${durSec}s, trackId=$currentTrackId")
+            CassetteDiagnostics.currentPositionMs = player.currentPosition
+            CassetteDiagnostics.durationMs = player.duration
+            CassetteDiagnostics.currentTrackId = currentTrackId
+            CassetteDiagnostics.isPlaying = player.isPlaying
 
             val ret = JSObject().apply {
                 put("isPlaying", player.isPlaying)
@@ -340,8 +402,52 @@ class CassettePlaybackPlugin : Plugin() {
     }
 
     @PluginMethod
+    fun getDiagnostics(call: PluginCall) {
+        val player = mediaController
+
+        val posSec = if (player != null) player.currentPosition / 1000.0 else CassetteDiagnostics.currentPositionMs / 1000.0
+        val durSec = if (player != null && player.duration > 0) player.duration / 1000.0 else CassetteDiagnostics.durationMs / 1000.0
+        val trackId = player?.currentMediaItem?.mediaId ?: CassetteDiagnostics.currentTrackId
+
+        val logsArray = JSArray()
+        synchronized(CassetteDiagnostics.logs) {
+            for (entry in CassetteDiagnostics.logs) {
+                logsArray.put(entry)
+            }
+        }
+
+        val activityArray = JSArray()
+        synchronized(CassetteDiagnostics.activityEvents) {
+            for (act in CassetteDiagnostics.activityEvents) {
+                activityArray.put(act)
+            }
+        }
+
+        val res = JSObject().apply {
+            put("serviceAlive", CassetteDiagnostics.serviceAlive)
+            put("serviceId", CassetteDiagnostics.serviceId)
+            put("playerAlive", CassetteDiagnostics.playerAlive)
+            put("playerId", CassetteDiagnostics.playerId)
+            put("playerState", CassetteDiagnostics.playerState)
+            put("isPlaying", player?.isPlaying ?: CassetteDiagnostics.isPlaying)
+            put("playWhenReady", player?.playWhenReady ?: CassetteDiagnostics.playWhenReady)
+            put("currentPosition", posSec)
+            put("duration", durSec)
+            put("currentTrackId", trackId)
+            put("controllerConnected", player?.isConnected ?: CassetteDiagnostics.controllerConnected)
+            put("lastActivityState", CassetteDiagnostics.lastActivityState)
+            put("activityEvents", activityArray)
+            put("logs", logsArray)
+        }
+        call.resolve(res)
+    }
+
+    @PluginMethod
     fun destroy(call: PluginCall) {
-        Log.d(TAG, "[PLUGIN-CALL] destroy() CALLED\nStack:\n${Log.getStackTraceString(Throwable())}")
+        val stack = Log.getStackTraceString(Throwable())
+        val msg = "destroy() CALLED\nStack:\n$stack"
+        Log.d(TAG, "[PLUGIN-CALL] $msg")
+        CassetteDiagnostics.log("PLUGIN-CALL", msg)
         stopProgressPolling()
         mediaController?.stop()
         call.resolve(JSObject().put("success", true))

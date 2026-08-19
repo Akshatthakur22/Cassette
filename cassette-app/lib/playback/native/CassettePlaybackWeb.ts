@@ -1,5 +1,8 @@
 import { WebPlugin } from "@capacitor/core";
-import { CassettePlaybackPluginInterface } from "./CassettePlaybackPlugin";
+import {
+  CassettePlaybackPluginInterface,
+  NativeDiagnosticsData,
+} from "./CassettePlaybackPlugin";
 import { NativePlaybackState } from "./types";
 
 export class CassettePlaybackWeb
@@ -39,6 +42,25 @@ export class CassettePlaybackWeb
       currentTime: 0,
       duration: 0,
       isBuffering: false,
+    };
+  }
+
+  async getDiagnostics(): Promise<NativeDiagnosticsData> {
+    return {
+      serviceAlive: false,
+      serviceId: 0,
+      playerAlive: false,
+      playerId: 0,
+      playerState: "WEB_FALLBACK",
+      isPlaying: false,
+      playWhenReady: false,
+      currentPosition: 0,
+      duration: 0,
+      currentTrackId: null,
+      controllerConnected: false,
+      lastActivityState: "WEB",
+      activityEvents: ["[WEB] Web browser environment"],
+      logs: ["[WEB] Running in Web browser fallback"],
     };
   }
 

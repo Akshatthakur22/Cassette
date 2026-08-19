@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { CassettePlayback } from "./CassettePlaybackPlugin";
+import { CassettePlayback, NativeDiagnosticsData } from "./CassettePlaybackPlugin";
 import {
   NativePlaybackTrack,
   NativePlaybackState,
@@ -97,6 +97,28 @@ export class NativePlaybackBridge {
       return { isPlaying: false, currentTime: 0, duration: 0, isBuffering: false };
     }
     return await CassettePlayback.getState();
+  }
+
+  public async getDiagnostics(): Promise<NativeDiagnosticsData> {
+    if (!this.isAvailable()) {
+      return {
+        serviceAlive: false,
+        serviceId: 0,
+        playerAlive: false,
+        playerId: 0,
+        playerState: "WEB_BROWSER",
+        isPlaying: false,
+        playWhenReady: false,
+        currentPosition: 0,
+        duration: 0,
+        currentTrackId: null,
+        controllerConnected: false,
+        lastActivityState: "WEB",
+        activityEvents: ["[WEB] Running in web browser"],
+        logs: ["[WEB] Running in web browser, native bridge unavailable"],
+      };
+    }
+    return await CassettePlayback.getDiagnostics();
   }
 
   public subscribe(listener: NativePlaybackEventListener): () => void {
