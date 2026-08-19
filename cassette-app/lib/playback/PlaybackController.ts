@@ -35,6 +35,7 @@ export class PlaybackController {
   private setupNativeBridgeListener() {
     this.nativeBridge.subscribe((event) => {
       if (this.currentProvider !== "native_voice") return;
+      console.log("[REACT-PLAYBACK] nativeEvent received:", event);
 
       if (event.type === "timeUpdate" && event.currentTime !== undefined) {
         this.handleEngineUpdate({
@@ -84,7 +85,10 @@ export class PlaybackController {
     if (!this.nativeBridge.isAvailable()) return;
 
     try {
+      console.log("[REACT-PLAYBACK] syncWithNativeState() starting...");
       const nativeState = await this.nativeBridge.getState();
+      console.log("[REACT-PLAYBACK] syncWithNativeState() received:", nativeState);
+
       if (nativeState && nativeState.currentTrackId) {
         const foundIndex = this.state.queue.findIndex((t) => t.id === nativeState.currentTrackId);
         if (foundIndex >= 0) {
@@ -104,11 +108,12 @@ export class PlaybackController {
         }
       }
     } catch (e) {
-      console.debug("[PlaybackController] Error syncing with native state:", e);
+      console.debug("[REACT-PLAYBACK] Error syncing with native state:", e);
     }
   }
 
   public setQueue(queue: PlaybackTrack[], startIndex = 0): void {
+    console.log("[REACT-PLAYBACK] setQueue() called: length=" + queue.length + ", startIndex=" + startIndex);
     this.state = {
       ...this.state,
       queue,
@@ -124,6 +129,7 @@ export class PlaybackController {
   }
 
   public async playTrack(track: PlaybackTrack, queue?: PlaybackTrack[]): Promise<void> {
+    console.log("[REACT-PLAYBACK] playTrack() called:", track.id, track.title, track.provider);
     const newQueue = queue || this.state.queue;
     const queueIndex = newQueue.findIndex((t) => t.id === track.id);
 
@@ -195,6 +201,7 @@ export class PlaybackController {
   }
 
   public async play(): Promise<void> {
+    console.log("[REACT-PLAYBACK] play() called: currentTrack=" + this.state.currentTrack?.id);
     if (!this.state.currentTrack) {
       if (this.state.queue.length > 0) {
         await this.playTrack(this.state.queue[this.state.queueIndex || 0]);
@@ -213,6 +220,7 @@ export class PlaybackController {
   }
 
   public async pause(): Promise<void> {
+    console.log("[REACT-PLAYBACK] pause() called");
     if (this.currentProvider === "native_voice" && this.nativeBridge.isAvailable()) {
       await this.nativeBridge.pause();
     } else if (this.engine) {
@@ -224,6 +232,7 @@ export class PlaybackController {
   }
 
   public async seek(seconds: number): Promise<void> {
+    console.log("[REACT-PLAYBACK] seek() called:", seconds);
     if (this.currentProvider === "native_voice" && this.nativeBridge.isAvailable()) {
       await this.nativeBridge.seek(seconds);
     } else if (this.engine) {
@@ -235,6 +244,7 @@ export class PlaybackController {
   }
 
   public async next(): Promise<void> {
+    console.log("[REACT-PLAYBACK] next() called");
     const { queue, queueIndex } = this.state;
     if (queue.length === 0) return;
 
@@ -248,6 +258,7 @@ export class PlaybackController {
   }
 
   public async previous(): Promise<void> {
+    console.log("[REACT-PLAYBACK] previous() called");
     if (this.state.currentTime > 3) {
       await this.seek(0);
       return;
