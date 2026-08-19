@@ -48,9 +48,9 @@ function VUMeter({ isPlaying, accent }: { isPlaying: boolean; accent: string }) 
               ? {
                   height: [
                     4 + i * 1.5,
-                    6 + Math.random() * 8,
+                    6 + ((i * 3) % 8),
                     3 + i * 1.2,
-                    8 + Math.random() * 6,
+                    8 + ((i * 5) % 6),
                     4 + i * 1.5,
                   ],
                 }
@@ -79,8 +79,6 @@ function LCDTicker({ text }: { text: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const rafRef = useRef<number | null>(null);
-
-  useEffect(() => { setOffset(0); }, [text]);
 
   useEffect(() => {
     const textEl = textRef.current;
@@ -231,6 +229,7 @@ export default function PlayerBar({
 
   useEffect(() => {
     initBackgroundPlayback();
+    playbackController.syncWithNativeState();
   }, []);
 
   // Map incoming tracks to PlaybackTrack format
@@ -278,6 +277,7 @@ export default function PlayerBar({
     if (targetTrack && targetTrack.id !== currentTrackIdRef.current) {
       currentTrackIdRef.current = targetTrack.id;
       playbackController.setQueue(mappedQueue, currentIndex);
+      playbackController.syncWithNativeState();
     }
   }, [currentIndex, mappedQueue]);
 

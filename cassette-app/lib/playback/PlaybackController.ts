@@ -80,6 +80,34 @@ export class PlaybackController {
     return this.state;
   }
 
+  public async syncWithNativeState(): Promise<void> {
+    if (!this.nativeBridge.isAvailable()) return;
+
+    try {
+      const nativeState = await this.nativeBridge.getState();
+      if (nativeState && nativeState.currentTrackId) {
+        const foundIndex = this.state.queue.findIndex((t) => t.id === nativeState.currentTrackId);
+        if (foundIndex >= 0) {
+          const track = this.state.queue[foundIndex];
+          this.currentProvider = "native_voice";
+          this.state = {
+            ...this.state,
+            currentTrack: track,
+            queueIndex: foundIndex,
+            side: track.side,
+            isPlaying: nativeState.isPlaying,
+            currentTime: nativeState.currentTime,
+            duration: nativeState.duration > 0 ? nativeState.duration : track.durationSec || 0,
+            isBuffering: nativeState.isBuffering,
+          };
+          this.emit();
+        }
+      }
+    } catch (e) {
+      console.debug("[PlaybackController] Error syncing with native state:", e);
+    }
+  }
+
   public setQueue(queue: PlaybackTrack[], startIndex = 0): void {
     this.state = {
       ...this.state,
