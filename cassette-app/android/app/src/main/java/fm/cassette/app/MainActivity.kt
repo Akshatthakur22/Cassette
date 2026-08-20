@@ -4,9 +4,6 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.Button
@@ -26,70 +23,105 @@ class MainActivity : BridgeActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.d(TAG, "[ACTIVITY] onCreate")
+        // Global Uncaught Exception Handler to capture any native startup crash and display CrashActivity
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e(TAG, "[UNCAUGHT-CRASH] Crash in thread ${thread.name}: ${throwable.message}", throwable)
+            try {
+                CrashActivity.start(applicationContext, throwable)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to launch CrashActivity: ${e.message}", e)
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+
+        Log.d(TAG, "[ACTIVITY] onCreate starting")
         CassetteDiagnostics.recordActivity("onCreate")
-        registerPlugin(CassettePlaybackPlugin::class.java)
-        super.onCreate(savedInstanceState)
+
+        try {
+            // Register CassettePlayback custom plugin with Capacitor Bridge
+            registerPlugin(CassettePlaybackPlugin::class.java)
+        } catch (t: Throwable) {
+            Log.e(TAG, "[ACTIVITY] Error registering CassettePlaybackPlugin: ${t.message}", t)
+            CassetteDiagnostics.log("ACTIVITY-ERROR", "registerPlugin failed: ${t.message}")
+        }
+
+        try {
+            super.onCreate(savedInstanceState)
+        } catch (t: Throwable) {
+            Log.e(TAG, "[ACTIVITY] Error in super.onCreate: ${t.message}", t)
+            CrashActivity.start(this, t)
+            return
+        }
 
         // Configure WebView settings for Next.js web application compatibility
-        val webView = bridge?.webView
-        if (webView != null) {
-            webView.settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                mediaPlaybackRequiresUserGesture = false
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                allowFileAccess = true
-                allowContentAccess = true
-            }
+        try {
+            val webView = bridge?.webView
+            if (webView != null) {
+                webView.settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    databaseEnabled = true
+                    mediaPlaybackRequiresUserGesture = false
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                    allowFileAccess = true
+                    allowContentAccess = true
+                }
 
-            setupErrorOverlay(webView)
-            setupWebViewDiagnosticListeners(webView)
+                setupErrorOverlay(webView)
+                setupWebViewDiagnosticListeners(webView)
+            }
+        } catch (t: Throwable) {
+            Log.e(TAG, "[ACTIVITY] Error configuring WebView: ${t.message}", t)
+            CassetteDiagnostics.log("ACTIVITY-ERROR", "WebView config error: ${t.message}")
         }
     }
 
     private fun setupErrorOverlay(webView: WebView) {
-        errorLayout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF171717.toInt()) // Neutral-900
-            setPadding(64, 120, 64, 64)
-            visibility = View.GONE
+        try {
+            errorLayout = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(0xFF171717.toInt())
+                setPadding(64, 120, 64, 64)
+                visibility = View.GONE
 
-            val titleView = TextView(this@MainActivity).apply {
-                text = "📼 Cassette Loading Error"
-                textSize = 20f
-                setTextColor(0xFFF59E0B.toInt()) // Amber-500
-                setPadding(0, 0, 0, 24)
-            }
-            addView(titleView)
-
-            errorTextView = TextView(this@MainActivity).apply {
-                textSize = 14f
-                setTextColor(0xFFD4D4D4.toInt()) // Neutral-300
-                setPadding(0, 0, 0, 32)
-            }
-            addView(errorTextView)
-
-            val retryButton = Button(this@MainActivity).apply {
-                text = "🔄 Retry Loading"
-                setBackgroundColor(0xFFF59E0B.toInt())
-                setTextColor(0xFF000000.toInt())
-                setOnClickListener {
-                    errorLayout?.visibility = View.GONE
-                    webView.reload()
+                val titleView = TextView(this@MainActivity).apply {
+                    text = "📼 Cassette Loading Error"
+                    textSize = 20f
+                    setTextColor(0xFFF59E0B.toInt())
+                    setPadding(0, 0, 0, 24)
                 }
-            }
-            addView(retryButton)
-        }
+                addView(titleView)
 
-        addContentView(
-            errorLayout,
-            LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT
+                errorTextView = TextView(this@MainActivity).apply {
+                    textSize = 14f
+                    setTextColor(0xFFD4D4D4.toInt())
+                    setPadding(0, 0, 0, 32)
+                }
+                addView(errorTextView)
+
+                val retryButton = Button(this@MainActivity).apply {
+                    text = "🔄 Retry Loading"
+                    setBackgroundColor(0xFFF59E0B.toInt())
+                    setTextColor(0xFF000000.toInt())
+                    setOnClickListener {
+                        errorLayout?.visibility = View.GONE
+                        webView.reload()
+                    }
+                }
+                addView(retryButton)
+            }
+
+            addContentView(
+                errorLayout,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                )
             )
-        )
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to attach error overlay view: ${t.message}")
+        }
     }
 
     private fun setupWebViewDiagnosticListeners(webView: WebView) {

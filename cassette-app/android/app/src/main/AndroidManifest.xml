@@ -25,6 +25,13 @@
 
         </activity>
 
+        <activity
+            android:name=".CrashActivity"
+            android:label="Cassette Error"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:process=":crash"
+            android:exported="false" />
+
         <service
             android:name=".CassettePlaybackService"
             android:enabled="true"
@@ -50,4 +57,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>

@@ -37,7 +37,12 @@ class CassettePlaybackPlugin : Plugin() {
         super.load()
         Log.d(TAG, "[PLUGIN-LIFECYCLE] load called")
         CassetteDiagnostics.log("PLUGIN-LIFECYCLE", "load called")
-        initMediaController()
+        try {
+            initMediaController()
+        } catch (t: Throwable) {
+            Log.e(TAG, "[PLUGIN-LIFECYCLE] Error initializing MediaController in load(): ${t.message}", t)
+            CassetteDiagnostics.log("PLUGIN-ERROR", "Error in load(): ${t.message}\n${Log.getStackTraceString(t)}")
+        }
     }
 
     private fun initMediaController(onReady: ((MediaController) -> Unit)? = null) {

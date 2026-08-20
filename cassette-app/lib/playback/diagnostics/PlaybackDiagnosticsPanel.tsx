@@ -62,20 +62,6 @@ export function PlaybackDiagnosticsPanel() {
 
   return (
     <>
-      {/* Floating Toggle Button */}
-      <div className="fixed bottom-4 left-4 z-50">
-        <button
-          onClick={() => {
-            setIsOpen(!isOpen);
-            fetchDiagnostics();
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium shadow-lg backdrop-blur-md transition-all border border-amber-500/40 bg-black/80 text-amber-300 hover:bg-amber-950/80 active:scale-95"
-        >
-          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          🛠️ Diagnostics
-        </button>
-      </div>
-
       {/* Modal Dialog */}
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm">
