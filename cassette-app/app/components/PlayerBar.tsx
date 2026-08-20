@@ -223,7 +223,6 @@ export default function PlayerBar({
   onTimeUpdate,
   accentColor = "#D4882A",
 }: PlayerBarProps) {
-  const [showVideo, setShowVideo] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const playbackState = usePlaybackState();
 
@@ -568,6 +567,7 @@ export default function PlayerBar({
           </div>
 
           {/* RIGHT — ◄◄ ►► + video toggle */}
+          {/* RIGHT — ◄◄ ►► */}
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="md"
@@ -594,23 +594,6 @@ export default function PlayerBar({
             >
               <FastForwardIcon size={13} />
             </HardwareButton>
-
-            {/* Video toggle */}
-            <motion.button
-              onClick={() => setShowVideo((v) => !v)}
-              aria-label={showVideo ? "Hide video" : "Show video"}
-              title={showVideo ? "Hide video" : "Show video"}
-              whileTap={{ scale: 0.88, y: 1 }}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-md sm:rounded-lg flex-shrink-0 flex items-center justify-center border-0 cursor-pointer"
-              style={{
-                background: showVideo
-                  ? `linear-gradient(175deg, ${accentColor}90 0%, ${accentColor}55 100%)`
-                  : "linear-gradient(175deg, #3A3028 0%, #241C14 100%)",
-                boxShadow: "0 1px 0 rgba(255,255,255,0.07) inset, 0 3px 8px rgba(0,0,0,0.5)",
-              }}
-            >
-              <VideoIcon accent={showVideo ? "#E8DCC8" : "#6A604A"} />
-            </motion.button>
           </div>
 
           {/* WERK branding — right edge */}
@@ -667,33 +650,6 @@ export default function PlayerBar({
           )}
         </AnimatePresence>
       </div>
-
-      {/* ── YOUTUBE PLAYER CONTAINER ────────────────────────────────────────── */}
-      <div
-        style={{
-          background: "#0E0C08",
-          borderTop: showVideo ? "1px solid rgba(255,255,255,0.035)" : "none",
-          overflow: "hidden",
-          maxHeight: showVideo ? 220 : 0,
-          transition: "max-height 0.35s cubic-bezier(0.22,1,0.36,1)",
-        }}
-      >
-        <div className="w-full max-w-xs mx-auto" style={{ aspectRatio: "16/9", padding: "8px 12px" }}>
-          {/* YouTube player iframe target container */}
-          <div
-            id="yt-player-cassette"
-            style={{
-              width: "100%",
-              height: "100%",
-              minWidth: 180,
-              minHeight: 102,
-              borderRadius: 8,
-              overflow: "hidden",
-              background: "#100E08",
-            }}
-          />
-        </div>
-      </div>
     </motion.div>
   );
 }
@@ -734,14 +690,6 @@ function FastForwardIcon({ size = 13 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 13 13" fill="none">
       <path d="M6.5 6.5L1 2.5v8l5.5-4z" fill="#E8DCC8" />
       <path d="M12 6.5L6.5 2.5v8l5.5-4z" fill="#E8DCC8" />
-    </svg>
-  );
-}
-function VideoIcon({ accent }: { accent: string }) {
-  return (
-    <svg width="13" height="11" viewBox="0 0 13 11" fill="none">
-      <rect x="0.5" y="0.5" width="8" height="10" rx="1.5" stroke={accent} strokeWidth="1" />
-      <path d="M9 3.5L12.5 2v7L9 7.5V3.5z" fill={accent} />
     </svg>
   );
 }

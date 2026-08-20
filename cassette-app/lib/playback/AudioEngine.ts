@@ -4,7 +4,7 @@ export function resolveAudioUrl(track: PlaybackTrack): string {
   if (track.audioUrl) {
     return track.audioUrl;
   }
-  const id = track.providerTrackId;
+  const id = (track.providerTrackId || "").trim();
   if (!id) return "";
   if (
     id.startsWith("http://") ||
@@ -18,7 +18,8 @@ export function resolveAudioUrl(track: PlaybackTrack): string {
   if (track.provider === "voice") {
     return id.endsWith(".webm") ? `/voice-recordings/${id}` : `/voice-recordings/${id}.webm`;
   }
-  return `/audio-library/${id}.mp3`;
+  const sanitizedId = id.replace(/[^a-zA-Z0-9_-]/g, "");
+  return `/audio-library/${sanitizedId}.mp3`;
 }
 
 export class AudioEngine implements PlaybackEngine {

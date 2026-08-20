@@ -21,10 +21,10 @@ export default async function PreviewPage({
   if (!tape) notFound();
 
   const backgroundImageNumber = getStableImageNumber(tape.id, 20);
-  const preloadImages = [
-    { src: `/images/optimized/${backgroundImageNumber}.png`, format: "png" as const },
-    { src: "/images/optimized/14.png", format: "png" as const },
-  ];
+  const bgSrc = `/images/optimized/${backgroundImageNumber}.png`;
+  const preloadImages = Array.from(
+    new Set([bgSrc, "/images/optimized/14.png"])
+  ).map((src) => ({ src, format: "png" as const }));
 
   return (
     <div className="relative">

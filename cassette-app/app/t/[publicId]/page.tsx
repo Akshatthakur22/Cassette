@@ -161,10 +161,10 @@ export default async function TapePage({ params }: Props) {
     };
 
     const backgroundImageNumber = getStableImageNumber(publicId, 20);
-    const preloadImages = [
-      { src: `/images/optimized/${backgroundImageNumber}.png`, format: "png" as const },
-      { src: "/images/optimized/14.png", format: "png" as const },
-    ];
+    const bgSrc = `/images/optimized/${backgroundImageNumber}.png`;
+    const preloadImages = Array.from(
+      new Set([bgSrc, "/images/optimized/14.png"])
+    ).map((src) => ({ src, format: "png" as const }));
 
     console.log(`[TapePage] Rendering TapeViewClient`);
     return (

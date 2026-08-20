@@ -5,7 +5,6 @@ import {
   PlaybackListener,
 } from "./types";
 import { AudioEngine } from "./AudioEngine";
-import { YouTubeEngine } from "./YouTubeEngine";
 import { updateMediaSession } from "./MediaSessionManager";
 import { nativePlaybackBridge, NativePlaybackBridge } from "./native/NativePlaybackBridge";
 import { songResolver } from "./SongResolver";
@@ -27,7 +26,6 @@ export class PlaybackController {
   private nativeBridge: NativePlaybackBridge = nativePlaybackBridge;
   private currentProvider: string | null = null;
   private listeners: Set<PlaybackListener> = new Set();
-  private containerId: string = "yt-player-cassette";
 
   constructor() {
     this.setupNativeBridgeListener();
@@ -64,10 +62,6 @@ export class PlaybackController {
         }
       }
     });
-  }
-
-  public setContainerId(id: string) {
-    this.containerId = id;
   }
 
   public subscribe(listener: PlaybackListener): () => void {
@@ -156,17 +150,26 @@ export class PlaybackController {
     // 1. Resolve audio URL if needed for YouTube tracks
     let activeTrack: PlaybackTrack = { ...track };
     if ((activeTrack.provider === "youtube" || activeTrack.provider === "cassette") && !activeTrack.audioUrl) {
-      const resolved = await songResolver.resolveSong(activeTrack.providerTrackId, activeTrack);
-      if (resolved && resolved.audioUrl) {
+      const cached = songResolver.getCached(activeTrack.providerTrackId);
+      if (cached && cached.audioUrl) {
         activeTrack = {
           ...activeTrack,
-          audioUrl: resolved.audioUrl,
-          durationSec: resolved.durationSec || activeTrack.durationSec,
+          audioUrl: cached.audioUrl,
+          durationSec: cached.durationSec || activeTrack.durationSec,
         };
-        // Update track in queue as well
-        if (resolvedIndex >= 0 && resolvedIndex < newQueue.length) {
-          newQueue[resolvedIndex] = activeTrack;
+      } else {
+        const resolved = await songResolver.resolveSong(activeTrack.providerTrackId, activeTrack);
+        if (resolved && resolved.audioUrl) {
+          activeTrack = {
+            ...activeTrack,
+            audioUrl: resolved.audioUrl,
+            durationSec: resolved.durationSec || activeTrack.durationSec,
+          };
         }
+      }
+
+      if (resolvedIndex >= 0 && resolvedIndex < newQueue.length) {
+        newQueue[resolvedIndex] = activeTrack;
       }
     }
 
@@ -199,33 +202,18 @@ export class PlaybackController {
       return;
     }
 
-    // 3. Route to Web HTML5 AudioEngine (or fallback to YouTubeEngine if unresolved)
+    // 3. Route to Web HTML5 AudioEngine (playing downloaded song from library)
     if (this.currentProvider === "native_audio") {
       await this.nativeBridge.pause();
     }
 
-    if (activeTrack.audioUrl || activeTrack.provider === "voice") {
-      // Use AudioEngine for backend audio library and voice
-      if (this.engine && !(this.engine instanceof AudioEngine)) {
+    if (!this.engine || !(this.engine instanceof AudioEngine)) {
+      if (this.engine) {
         this.engine.destroy();
-        this.engine = null;
       }
-      if (!this.engine) {
-        this.engine = new AudioEngine();
-      }
-      this.currentProvider = "web_audio";
-    } else {
-      // Fallback to YouTubeEngine if resolution didn't produce an audioUrl
-      if (this.engine && !(this.engine instanceof YouTubeEngine)) {
-        this.engine.destroy();
-        this.engine = null;
-      }
-      if (!this.engine) {
-        this.engine = new YouTubeEngine(this.containerId);
-      }
-      this.currentProvider = "youtube_iframe";
+      this.engine = new AudioEngine();
     }
-
+    this.currentProvider = "web_audio";
     this.engine.onStateChange(this.handleEngineUpdate);
 
     this.state = {
@@ -236,6 +224,7 @@ export class PlaybackController {
       side: activeTrack.side,
       duration: activeTrack.durationSec || 0,
       isPlaying: false,
+      isBuffering: true,
     };
     this.emit();
 
@@ -260,6 +249,9 @@ export class PlaybackController {
       await this.nativeBridge.play();
     } else if (this.engine) {
       await this.engine.play();
+    } else {
+      await this.playTrack(this.state.currentTrack, this.state.queue);
+      return;
     }
     this.state = { ...this.state, isPlaying: true };
     this.emit();
