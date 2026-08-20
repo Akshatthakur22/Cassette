@@ -33,6 +33,32 @@ export async function GET(
     }
 
     if (!exists) {
+      // If file not on disk (e.g. fresh serverless lambda container), stream directly using ytdl
+      try {
+        const ytdl = (await import("@distube/ytdl-core")).default;
+        const videoUrl = `https://www.youtube.com/watch?v=${sanitizedId}`;
+        const info = await ytdl.getInfo(videoUrl);
+        const format = ytdl.chooseFormat(info.formats, {
+          filter: "audioonly",
+          quality: "highestaudio",
+        });
+
+        if (format && format.url) {
+          const ytdlStream = ytdl.downloadFromInfo(info, { format });
+          const webStream = Readable.toWeb(ytdlStream) as ReadableStream;
+          return new NextResponse(webStream, {
+            status: 200,
+            headers: {
+              "Content-Type": format.mimeType?.split(";")[0] || "audio/mp4",
+              "Accept-Ranges": "bytes",
+              "Cache-Control": "public, max-age=3600",
+            },
+          });
+        }
+      } catch (streamErr) {
+        console.warn("[api/audio] Dynamic stream error:", streamErr);
+      }
+
       return new NextResponse("Audio file not found", { status: 404 });
     }
 

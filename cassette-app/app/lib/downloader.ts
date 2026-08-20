@@ -92,9 +92,10 @@ export async function downloadYouTubeAudio(
     try {
       console.log(`[Downloader] Starting audio download for videoId: ${sanitizedId}`);
       const storageDir = getAudioStorageDir();
-      await mkdir(storageDir, { recursive: true });
+      try {
+        await mkdir(storageDir, { recursive: true });
+      } catch {}
 
-      const ytDlp = await getYtDlp();
       const videoUrl = `https://www.youtube.com/watch?v=${sanitizedId}`;
 
       let title = fallbackMeta?.title || "Audio Track";
@@ -103,91 +104,128 @@ export async function downloadYouTubeAudio(
       let thumbnailUrl =
         fallbackMeta?.thumbnailUrl || `https://i.ytimg.com/vi/${sanitizedId}/hqdefault.jpg`;
 
-      const ffmpegPath = getFfmpegLocation();
-      let targetPath = getAudioFilePath(sanitizedId, "mp3");
-      let args: string[];
-
-      if (ffmpegPath) {
-        args = [
-          videoUrl,
-          "-f",
-          "ba/b",
-          "-x",
-          "--audio-format",
-          "mp3",
-          "--audio-quality",
-          "0",
-          "--no-playlist",
-          "--no-warnings",
-          "--ffmpeg-location",
-          ffmpegPath,
-          "-o",
-          targetPath,
-        ];
-      } else {
-        // Without ffmpeg, download native stream container (m4a/webm/mp3)
-        const templatePath = join(storageDir, `${sanitizedId}.%(ext)s`);
-        args = [
-          videoUrl,
-          "-f",
-          "ba/b",
-          "--no-playlist",
-          "--no-warnings",
-          "-o",
-          templatePath,
-        ];
-      }
-
-      // Clean up any stale partial target
+      // Try pure JS metadata extraction first if fallbackMeta is incomplete
       try {
-        if (existsSync(targetPath)) {
-          const checkStat = await stat(targetPath);
-          if (checkStat.size < 1024) {
-            await unlink(targetPath);
+        const ytdl = (await import("@distube/ytdl-core")).default;
+        const basicInfo = await ytdl.getBasicInfo(videoUrl);
+        if (basicInfo?.videoDetails) {
+          title = basicInfo.videoDetails.title || title;
+          artist = basicInfo.videoDetails.author?.name || artist;
+          const parsedSec = parseInt(basicInfo.videoDetails.lengthSeconds, 10);
+          if (parsedSec > 0) durationSec = parsedSec;
+          const thumbs = basicInfo.videoDetails.thumbnails;
+          if (thumbs && thumbs.length > 0) {
+            thumbnailUrl = thumbs[thumbs.length - 1].url || thumbnailUrl;
           }
         }
-      } catch {}
+      } catch (e) {
+        console.debug("[Downloader] ytdl info fetch note:", e);
+      }
 
-      // Execute download
-      await ytDlp.execPromise(args);
+      // Attempt yt-dlp binary download if available
+      try {
+        const ytDlp = await getYtDlp();
+        const ffmpegPath = getFfmpegLocation();
+        let targetPath = getAudioFilePath(sanitizedId, "mp3");
+        let args: string[];
 
-      // Identify the created file
-      let finalPath = targetPath;
-      let finalExt = "mp3";
-      if (!existsSync(finalPath)) {
-        for (const candidateExt of ["m4a", "webm", "opus", "mp3"]) {
-          const checkPath = getAudioFilePath(sanitizedId, candidateExt);
-          if (existsSync(checkPath)) {
-            finalPath = checkPath;
-            finalExt = candidateExt;
-            break;
+        if (ffmpegPath) {
+          args = [
+            videoUrl,
+            "-f",
+            "ba/b",
+            "-x",
+            "--audio-format",
+            "mp3",
+            "--audio-quality",
+            "0",
+            "--no-playlist",
+            "--no-warnings",
+            "--ffmpeg-location",
+            ffmpegPath,
+            "-o",
+            targetPath,
+          ];
+        } else {
+          // Without ffmpeg, download native stream container (m4a/webm/mp3)
+          const templatePath = join(storageDir, `${sanitizedId}.%(ext)s`);
+          args = [
+            videoUrl,
+            "-f",
+            "ba/b",
+            "--no-playlist",
+            "--no-warnings",
+            "-o",
+            templatePath,
+          ];
+        }
+
+        // Clean up any stale partial target
+        try {
+          if (existsSync(targetPath)) {
+            const checkStat = await stat(targetPath);
+            if (checkStat.size < 1024) {
+              await unlink(targetPath);
+            }
+          }
+        } catch {}
+
+        // Execute download
+        await ytDlp.execPromise(args);
+
+        // Identify the created file
+        let finalPath = targetPath;
+        let finalExt = "mp3";
+        if (!existsSync(finalPath)) {
+          for (const candidateExt of ["m4a", "webm", "opus", "mp3"]) {
+            const checkPath = getAudioFilePath(sanitizedId, candidateExt);
+            if (existsSync(checkPath)) {
+              finalPath = checkPath;
+              finalExt = candidateExt;
+              break;
+            }
           }
         }
+
+        if (existsSync(finalPath)) {
+          const s = await stat(finalPath);
+          if (s.size >= 1024) {
+            let mimeType = "audio/mpeg";
+            if (finalExt === "m4a") mimeType = "audio/mp4";
+            else if (finalExt === "webm") mimeType = "audio/webm";
+            else if (finalExt === "opus") mimeType = "audio/opus";
+
+            console.log(
+              `[Downloader] Audio download complete for ${sanitizedId}: size=${s.size} bytes, format=${finalExt}`
+            );
+
+            return {
+              videoId: sanitizedId,
+              title,
+              artist,
+              thumbnailUrl,
+              durationSec,
+              audioUrl: getAudioPublicUrl(sanitizedId, finalExt),
+              mimeType,
+              fileSizeBytes: s.size,
+            };
+          }
+        }
+      } catch (binErr) {
+        console.warn("[Downloader] Binary downloader note:", binErr);
       }
 
-      const s = await stat(finalPath);
-      if (s.size < 1024) {
-        throw new Error(`Downloaded audio file is too small or corrupt (${s.size} bytes)`);
-      }
-
-      let mimeType = "audio/mpeg";
-      if (finalExt === "m4a") mimeType = "audio/mp4";
-      else if (finalExt === "webm") mimeType = "audio/webm";
-      else if (finalExt === "opus") mimeType = "audio/opus";
-
-      console.log(
-        `[Downloader] Audio download complete for ${sanitizedId}: size=${s.size} bytes, format=${finalExt}`
-      );
-
+      // If binary download did not run (e.g. serverless lambda without binary support),
+      // return streaming URL to /api/audio/[videoId] which streams via pure JS
       return {
         videoId: sanitizedId,
         title,
         artist,
         thumbnailUrl,
         durationSec,
-        audioUrl: getAudioPublicUrl(sanitizedId, finalExt),
-        mimeType,
-        fileSizeBytes: s.size,
+        audioUrl: getAudioPublicUrl(sanitizedId, "mp3"),
+        mimeType: "audio/mpeg",
+        fileSizeBytes: 0,
       };
     } finally {
       // Clean up in-flight download map
