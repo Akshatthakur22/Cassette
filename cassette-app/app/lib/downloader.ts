@@ -39,8 +39,59 @@ function getFfmpegLocation(): string | undefined {
   return undefined;
 }
 
+import https from "https";
+import { createWriteStream } from "fs";
+
+export function getStandaloneBinaryName(): string {
+  const platform = process.platform;
+  const arch = process.arch;
+
+  if (platform === "linux") {
+    return arch === "arm64" ? "yt-dlp_linux_aarch64" : "yt-dlp_linux";
+  }
+  if (platform === "darwin") {
+    return "yt-dlp_macos";
+  }
+  if (platform === "win32") {
+    return "yt-dlp.exe";
+  }
+  return "yt-dlp";
+}
+
+async function downloadYtDlpStandalone(targetPath: string): Promise<void> {
+  const binaryName = getStandaloneBinaryName();
+  const downloadUrl = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${binaryName}`;
+  console.log(`[Downloader] Downloading standalone binary ${binaryName} to ${targetPath}...`);
+
+  await new Promise<void>((resolve, reject) => {
+    function fetchUrl(url: string) {
+      https.get(url, { headers: { "User-Agent": "Mozilla/5.0" } }, (res) => {
+        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          fetchUrl(res.headers.location);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          reject(new Error(`Failed to download binary: HTTP ${res.statusCode}`));
+          return;
+        }
+        const fileStream = createWriteStream(targetPath);
+        res.pipe(fileStream);
+        fileStream.on("finish", () => {
+          fileStream.close();
+          resolve();
+        });
+        fileStream.on("error", reject);
+      }).on("error", reject);
+    }
+    fetchUrl(downloadUrl);
+  });
+
+  await chmod(targetPath, 0o755);
+  console.log(`[Downloader] Standalone binary ready at ${targetPath}`);
+}
+
 /**
- * Initializes and returns a cached YTDlpWrap instance.
+ * Initializes and returns a cached YTDlpWrap instance using standalone compiled binaries.
  */
 export async function getYtDlp(): Promise<YTDlpWrap> {
   if (ytDlpInstance) return ytDlpInstance;
@@ -49,17 +100,37 @@ export async function getYtDlp(): Promise<YTDlpWrap> {
     ? join(tmpdir(), "cassette-bin")
     : join(process.cwd(), ".bin");
   await mkdir(binDir, { recursive: true });
-  const binaryPath = join(binDir, "yt-dlp");
+  const binaryPath = join(binDir, getStandaloneBinaryName());
 
   if (!existsSync(binaryPath)) {
-    console.log("[Downloader] Downloading latest yt-dlp binary to:", binaryPath);
-    await YTDlpWrap.downloadFromGithub(binaryPath);
-    await chmod(binaryPath, 0o755);
-    console.log("[Downloader] yt-dlp binary ready at:", binaryPath);
+    await downloadYtDlpStandalone(binaryPath);
   }
 
   ytDlpInstance = new YTDlpWrap(binaryPath);
   return ytDlpInstance;
+}
+
+/**
+ * Extracts direct high-speed audio stream URL from YouTube.
+ */
+export async function getDirectAudioStreamUrl(videoId: string): Promise<string | null> {
+  try {
+    const ytDlp = await getYtDlp();
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const output = await ytDlp.execPromise([
+      videoUrl,
+      "-g",
+      "-f",
+      "ba/b",
+      "--no-playlist",
+      "--no-warnings",
+    ]);
+    const urls = output.trim().split("\n").map((u) => u.trim()).filter(Boolean);
+    return urls[0] || null;
+  } catch (err) {
+    console.warn(`[Downloader] Failed to get direct stream URL for ${videoId}:`, err);
+    return null;
+  }
 }
 
 /**

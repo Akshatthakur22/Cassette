@@ -157,6 +157,9 @@ export default async function TapePage({ params }: Props) {
         providerTrackId: track.providerTrackId,
         personalNote: track.personalNote || null,
         durationSec: track.durationSec || null,
+        audioUrl: track.provider === "voice"
+          ? (track.providerTrackId.endsWith(".webm") ? `/voice-recordings/${track.providerTrackId}` : `/voice-recordings/${track.providerTrackId}.webm`)
+          : `/api/audio/${track.providerTrackId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
       }))
     };
 

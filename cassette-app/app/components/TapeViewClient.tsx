@@ -186,6 +186,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     providerTrackId: t.provider === "voice" ? t.providerTrackId : extractVideoId(t.providerTrackId),
     personalNote: t.personalNote ?? undefined,
     durationSec: t.durationSec ?? 0,
+    audioUrl: (t as any).audioUrl ?? undefined,
   }));
 
   const [interruptedByBackground, setInterruptedByBackground] = useState(false);

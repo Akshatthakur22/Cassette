@@ -33,7 +33,24 @@ export async function GET(
     }
 
     if (!exists) {
-      // If file not on disk (e.g. fresh serverless lambda container), stream directly using ytdl
+      // 1. Try to get direct audio stream URL via standalone extractor
+      try {
+        const { getDirectAudioStreamUrl } = await import("@/app/lib/downloader");
+        const directUrl = await getDirectAudioStreamUrl(sanitizedId);
+        if (directUrl) {
+          console.log(`[api/audio] Redirecting to direct stream for ${sanitizedId}`);
+          return NextResponse.redirect(directUrl, {
+            status: 307,
+            headers: {
+              "Cache-Control": "public, max-age=3600",
+            },
+          });
+        }
+      } catch (directErr) {
+        console.warn("[api/audio] Direct stream extraction error:", directErr);
+      }
+
+      // 2. Fallback to ytdl stream
       try {
         const ytdl = (await import("@distube/ytdl-core")).default;
         const videoUrl = `https://www.youtube.com/watch?v=${sanitizedId}`;
