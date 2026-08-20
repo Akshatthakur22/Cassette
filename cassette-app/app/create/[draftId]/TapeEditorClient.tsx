@@ -24,6 +24,7 @@ import {
 } from "@/app/actions/tape";
 import type { TapeWithTracks, TrackRow } from "@/app/lib/types";
 import type { YoutubePlaylist, YoutubePlaylistItem } from "@/app/lib/youtube";
+import { songResolver } from "@/lib/playback/SongResolver";
 
 // ─── 10-color tape picker ────────────────────────────────────────────────────
 const TAPE_STYLES = [
@@ -176,6 +177,14 @@ export default function TapeEditorClient({ tape: initialTape }: Props) {
           ...prev,
           tracks: prev.tracks.map(t => t.id === tempId ? (res.track as TrackRow) : t),
         }));
+
+        // Pre-resolve audio in background for instant playback readiness
+        songResolver.resolveSong(result.videoId, {
+          title: result.title,
+          artist: result.channelTitle,
+          artworkUrl: result.thumbnailUrl,
+          durationSec: result.durationSec,
+        }).catch(() => {});
       }
     });
   }

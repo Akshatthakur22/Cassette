@@ -20,8 +20,11 @@
 # production
 /build
 
-# voice recordings (uploaded files)
+# voice recordings and audio library (downloaded / uploaded files)
 /public/voice-recordings/
+/public/audio-library/*
+!/public/audio-library/.gitkeep
+/.bin/
 
 # misc
 .DS_Store

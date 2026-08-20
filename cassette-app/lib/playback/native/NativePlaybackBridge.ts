@@ -8,21 +8,35 @@ import {
 } from "./types";
 import { PlaybackTrack } from "../types";
 
-function resolveVoiceUrl(providerTrackId: string): string {
-  if (!providerTrackId) return "";
+function resolveNativeAudioUrl(track: PlaybackTrack): string {
+  let target = track.audioUrl || track.providerTrackId || "";
+  if (!target) return "";
+
   if (
-    providerTrackId.startsWith("http://") ||
-    providerTrackId.startsWith("https://") ||
-    providerTrackId.startsWith("/") ||
-    providerTrackId.startsWith("data:") ||
-    providerTrackId.startsWith("blob:")
+    target.startsWith("http://") ||
+    target.startsWith("https://") ||
+    target.startsWith("data:") ||
+    target.startsWith("blob:")
   ) {
-    return providerTrackId;
+    return target;
   }
-  if (providerTrackId.endsWith(".webm")) {
-    return `/voice-recordings/${providerTrackId}`;
+
+  // Base URL for relative paths when running in Capacitor Android/iOS WebView
+  let baseUrl = "https://cassette-share.vercel.app";
+  if (typeof window !== "undefined" && window.location?.origin && !window.location.origin.includes("localhost")) {
+    baseUrl = window.location.origin;
   }
-  return `/voice-recordings/${providerTrackId}.webm`;
+
+  if (target.startsWith("/")) {
+    return `${baseUrl}${target}`;
+  }
+
+  if (track.provider === "voice") {
+    const filename = target.endsWith(".webm") ? target : `${target}.webm`;
+    return `${baseUrl}/voice-recordings/${filename}`;
+  }
+
+  return `${baseUrl}/audio-library/${target}.mp3`;
 }
 
 export class NativePlaybackBridge {
@@ -37,9 +51,12 @@ export class NativePlaybackBridge {
   public async playTrack(track: PlaybackTrack): Promise<void> {
     if (!this.isAvailable()) return;
 
+    const url = resolveNativeAudioUrl(track);
+    console.log(`[NativePlaybackBridge] playTrack: title="${track.title}", url="${url}"`);
+
     const nativeTrack: NativePlaybackTrack = {
       id: track.id,
-      url: resolveVoiceUrl(track.providerTrackId),
+      url,
       title: track.title,
       artist: track.artist || "Cassette",
       album: "Cassette",
@@ -81,7 +98,7 @@ export class NativePlaybackBridge {
     if (!this.isAvailable()) return;
     const nativeQueue: NativePlaybackTrack[] = queue.map((t) => ({
       id: t.id,
-      url: resolveVoiceUrl(t.providerTrackId),
+      url: resolveNativeAudioUrl(t),
       title: t.title,
       artist: t.artist || "Cassette",
       album: "Cassette",

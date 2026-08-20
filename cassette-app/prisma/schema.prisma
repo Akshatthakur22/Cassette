@@ -131,3 +131,32 @@ model ContentReport {
   @@index([tapeId])
   @@index([status])
 }
+
+enum SongStatus {
+  PENDING
+  DOWNLOADING
+  READY
+  FAILED
+}
+
+model Song {
+  id            String      @id @default(cuid())
+  videoId       String      @unique
+  title         String
+  artist        String?
+  thumbnailUrl  String?
+  durationSec   Int?
+  audioUrl      String?
+  audioPath     String?
+  mimeType      String?     @default("audio/mp4")
+  fileSizeBytes Int?
+  status        SongStatus  @default(PENDING)
+  errorMessage  String?
+  downloadCount Int         @default(0)
+  lastPlayedAt  DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([videoId])
+  @@index([status])
+}

@@ -4,10 +4,11 @@ import {
   PlaybackEngine,
   PlaybackListener,
 } from "./types";
-import { VoiceEngine } from "./VoiceEngine";
+import { AudioEngine } from "./AudioEngine";
 import { YouTubeEngine } from "./YouTubeEngine";
 import { updateMediaSession } from "./MediaSessionManager";
 import { nativePlaybackBridge, NativePlaybackBridge } from "./native/NativePlaybackBridge";
+import { songResolver } from "./SongResolver";
 
 const initialPlaybackState: PlaybackState = {
   currentTrack: null,
@@ -34,7 +35,7 @@ export class PlaybackController {
 
   private setupNativeBridgeListener() {
     this.nativeBridge.subscribe((event) => {
-      if (this.currentProvider !== "native_voice") return;
+      if (this.currentProvider !== "native_audio") return;
       console.log("[REACT-PLAYBACK] nativeEvent received:", event);
 
       if (event.type === "timeUpdate" && event.currentTime !== undefined) {
@@ -93,7 +94,7 @@ export class PlaybackController {
         const foundIndex = this.state.queue.findIndex((t) => t.id === nativeState.currentTrackId);
         if (foundIndex >= 0) {
           const track = this.state.queue[foundIndex];
-          this.currentProvider = "native_voice";
+          this.currentProvider = "native_audio";
           this.state = {
             ...this.state,
             currentTrack: track,
@@ -114,88 +115,134 @@ export class PlaybackController {
 
   public setQueue(queue: PlaybackTrack[], startIndex = 0): void {
     console.log("[REACT-PLAYBACK] setQueue() called: length=" + queue.length + ", startIndex=" + startIndex);
+    const validIndex = Math.max(0, Math.min(startIndex, queue.length - 1));
     this.state = {
       ...this.state,
       queue,
-      queueIndex: Math.max(0, Math.min(startIndex, queue.length - 1)),
-      currentTrack: queue[startIndex] || null,
-      side: queue[startIndex]?.side || "A",
+      queueIndex: validIndex,
+      currentTrack: queue[validIndex] || null,
+      side: queue[validIndex]?.side || "A",
     };
     this.emit();
 
-    if (this.nativeBridge.isAvailable() && this.currentProvider === "native_voice") {
-      this.nativeBridge.setQueue(queue, startIndex);
+    if (this.nativeBridge.isAvailable() && this.currentProvider === "native_audio") {
+      this.nativeBridge.setQueue(queue, validIndex);
     }
+
+    // Prefetch next tracks
+    songResolver.prefetchQueue(queue, validIndex);
   }
 
   public async playTrack(track: PlaybackTrack, queue?: PlaybackTrack[]): Promise<void> {
     console.log("[REACT-PLAYBACK] playTrack() called:", track.id, track.title, track.provider);
     const newQueue = queue || this.state.queue;
     const queueIndex = newQueue.findIndex((t) => t.id === track.id);
+    const resolvedIndex = queueIndex >= 0 ? queueIndex : this.state.queueIndex;
 
-    // 1. Native platform check for voice tracks
-    if (this.nativeBridge.isAvailable() && track.provider === "voice") {
+    // Immediately update UI track state to show active item
+    this.state = {
+      ...this.state,
+      currentTrack: track,
+      queue: newQueue,
+      queueIndex: resolvedIndex,
+      side: track.side,
+      currentTime: 0,
+      duration: track.durationSec || 0,
+      isPlaying: true,
+      isBuffering: true,
+    };
+    this.emit();
+
+    // 1. Resolve audio URL if needed for YouTube tracks
+    let activeTrack: PlaybackTrack = { ...track };
+    if ((activeTrack.provider === "youtube" || activeTrack.provider === "cassette") && !activeTrack.audioUrl) {
+      const resolved = await songResolver.resolveSong(activeTrack.providerTrackId, activeTrack);
+      if (resolved && resolved.audioUrl) {
+        activeTrack = {
+          ...activeTrack,
+          audioUrl: resolved.audioUrl,
+          durationSec: resolved.durationSec || activeTrack.durationSec,
+        };
+        // Update track in queue as well
+        if (resolvedIndex >= 0 && resolvedIndex < newQueue.length) {
+          newQueue[resolvedIndex] = activeTrack;
+        }
+      }
+    }
+
+    // Prefetch upcoming tracks
+    songResolver.prefetchQueue(newQueue, resolvedIndex);
+
+    // 2. Route to Android Native Player
+    if (this.nativeBridge.isAvailable()) {
       if (this.engine) {
         this.engine.destroy();
         this.engine = null;
       }
-      this.currentProvider = "native_voice";
+      this.currentProvider = "native_audio";
 
       this.state = {
         ...this.state,
-        currentTrack: track,
+        currentTrack: activeTrack,
         queue: newQueue,
-        queueIndex: queueIndex >= 0 ? queueIndex : this.state.queueIndex,
-        side: track.side,
-        currentTime: 0,
-        duration: track.durationSec || 0,
+        queueIndex: resolvedIndex,
+        side: activeTrack.side,
+        duration: activeTrack.durationSec || 0,
         isPlaying: true,
+        isBuffering: false,
       };
       this.emit();
 
-      await this.nativeBridge.playTrack(track);
-      await this.nativeBridge.setQueue(newQueue, queueIndex >= 0 ? queueIndex : 0);
+      await this.nativeBridge.playTrack(activeTrack);
+      await this.nativeBridge.setQueue(newQueue, resolvedIndex);
       updateMediaSession(this.state);
       return;
     }
 
-    // 2. Web browser or YouTube provider
-    if (this.currentProvider === "native_voice") {
+    // 3. Route to Web HTML5 AudioEngine (or fallback to YouTubeEngine if unresolved)
+    if (this.currentProvider === "native_audio") {
       await this.nativeBridge.pause();
     }
 
-    if (this.engine && this.currentProvider !== track.provider) {
-      this.engine.destroy();
-      this.engine = null;
-    }
-
-    if (!this.engine) {
-      if (track.provider === "voice") {
-        this.engine = new VoiceEngine();
-      } else {
+    if (activeTrack.audioUrl || activeTrack.provider === "voice") {
+      // Use AudioEngine for backend audio library and voice
+      if (this.engine && !(this.engine instanceof AudioEngine)) {
+        this.engine.destroy();
+        this.engine = null;
+      }
+      if (!this.engine) {
+        this.engine = new AudioEngine();
+      }
+      this.currentProvider = "web_audio";
+    } else {
+      // Fallback to YouTubeEngine if resolution didn't produce an audioUrl
+      if (this.engine && !(this.engine instanceof YouTubeEngine)) {
+        this.engine.destroy();
+        this.engine = null;
+      }
+      if (!this.engine) {
         this.engine = new YouTubeEngine(this.containerId);
       }
-      this.currentProvider = track.provider;
+      this.currentProvider = "youtube_iframe";
     }
 
     this.engine.onStateChange(this.handleEngineUpdate);
 
     this.state = {
       ...this.state,
-      currentTrack: track,
+      currentTrack: activeTrack,
       queue: newQueue,
-      queueIndex: queueIndex >= 0 ? queueIndex : this.state.queueIndex,
-      side: track.side,
-      currentTime: 0,
-      duration: track.durationSec || 0,
+      queueIndex: resolvedIndex,
+      side: activeTrack.side,
+      duration: activeTrack.durationSec || 0,
       isPlaying: false,
     };
     this.emit();
 
-    await this.engine.load(track);
+    await this.engine.load(activeTrack);
     await this.engine.play();
 
-    this.state = { ...this.state, isPlaying: true };
+    this.state = { ...this.state, isPlaying: true, isBuffering: false };
     this.emit();
     updateMediaSession(this.state);
   }
@@ -209,7 +256,7 @@ export class PlaybackController {
       return;
     }
 
-    if (this.currentProvider === "native_voice" && this.nativeBridge.isAvailable()) {
+    if (this.currentProvider === "native_audio" && this.nativeBridge.isAvailable()) {
       await this.nativeBridge.play();
     } else if (this.engine) {
       await this.engine.play();
@@ -221,7 +268,7 @@ export class PlaybackController {
 
   public async pause(): Promise<void> {
     console.log("[REACT-PLAYBACK] pause() called");
-    if (this.currentProvider === "native_voice" && this.nativeBridge.isAvailable()) {
+    if (this.currentProvider === "native_audio" && this.nativeBridge.isAvailable()) {
       await this.nativeBridge.pause();
     } else if (this.engine) {
       await this.engine.pause();
@@ -233,7 +280,7 @@ export class PlaybackController {
 
   public async seek(seconds: number): Promise<void> {
     console.log("[REACT-PLAYBACK] seek() called:", seconds);
-    if (this.currentProvider === "native_voice" && this.nativeBridge.isAvailable()) {
+    if (this.currentProvider === "native_audio" && this.nativeBridge.isAvailable()) {
       await this.nativeBridge.seek(seconds);
     } else if (this.engine) {
       await this.engine.seek(seconds);

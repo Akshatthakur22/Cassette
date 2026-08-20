@@ -1,4 +1,4 @@
-export type TrackProvider = "youtube" | "voice";
+export type TrackProvider = "youtube" | "voice" | "cassette";
 
 export interface PlaybackTrack {
   id: string;                // TapeTrack.id
@@ -10,6 +10,8 @@ export interface PlaybackTrack {
   side: "A" | "B";
   durationSec?: number;
   personalNote?: string;
+  audioUrl?: string;         // Resolved Cassette audio URL
+  isResolving?: boolean;     // Resolution in-progress flag
 }
 
 export interface PlaybackState {
