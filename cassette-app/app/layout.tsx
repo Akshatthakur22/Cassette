@@ -127,7 +127,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {/* Google Analytics (gtag.js) */}
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-0RJSENM0M6"
+          src="https://www.googletagmanager.com/gtag/js?id=G-W6EFSFWMPB"
           strategy="afterInteractive"
         />
         <Script id="google-analytics" strategy="afterInteractive">
@@ -136,7 +136,7 @@ export default function RootLayout({
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
 
-            gtag('config', 'G-0RJSENM0M6');
+            gtag('config', 'G-W6EFSFWMPB');
           `}
         </Script>
         <PerformanceMonitor />
