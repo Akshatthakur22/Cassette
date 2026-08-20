@@ -3,6 +3,7 @@ import { getAudioFilePath, audioFileExists } from "@/lib/storage/audio-storage";
 import { createReadStream } from "fs";
 import { stat } from "fs/promises";
 import { Readable } from "stream";
+import { prisma } from "@/app/lib/prisma";
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +17,7 @@ export async function GET(
       return new NextResponse("Invalid video ID", { status: 400 });
     }
 
-    // Check extensions
+    // Check extensions on local storage if present
     let ext = "mp3";
     let exists = await audioFileExists(sanitizedId, "mp3");
     if (!exists) {
@@ -38,7 +39,28 @@ export async function GET(
         const { getDirectAudioStreamUrl } = await import("@/app/lib/downloader");
         const directUrl = await getDirectAudioStreamUrl(sanitizedId);
         if (directUrl) {
-          console.log(`[api/audio] Redirecting to direct stream for ${sanitizedId}`);
+          console.log(`[api/audio] Stream URL resolved for ${sanitizedId}, saving to DB and redirecting`);
+
+          // Update database record
+          prisma.song
+            .upsert({
+              where: { videoId: sanitizedId },
+              update: {
+                status: "READY",
+                lastPlayedAt: new Date(),
+                downloadCount: { increment: 1 },
+              },
+              create: {
+                videoId: sanitizedId,
+                title: "Audio Track",
+                audioUrl: `/api/audio/${sanitizedId}`,
+                status: "READY",
+                downloadCount: 1,
+                lastPlayedAt: new Date(),
+              },
+            })
+            .catch(() => { });
+
           return NextResponse.redirect(directUrl, {
             status: 307,
             headers: {

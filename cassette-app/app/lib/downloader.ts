@@ -90,6 +90,8 @@ async function downloadYtDlpStandalone(targetPath: string): Promise<void> {
   console.log(`[Downloader] Standalone binary ready at ${targetPath}`);
 }
 
+let binaryDownloadPromise: Promise<void> | null = null;
+
 /**
  * Initializes and returns a cached YTDlpWrap instance using standalone compiled binaries.
  */
@@ -103,7 +105,12 @@ export async function getYtDlp(): Promise<YTDlpWrap> {
   const binaryPath = join(binDir, getStandaloneBinaryName());
 
   if (!existsSync(binaryPath)) {
-    await downloadYtDlpStandalone(binaryPath);
+    if (!binaryDownloadPromise) {
+      binaryDownloadPromise = downloadYtDlpStandalone(binaryPath).finally(() => {
+        binaryDownloadPromise = null;
+      });
+    }
+    await binaryDownloadPromise;
   }
 
   ytDlpInstance = new YTDlpWrap(binaryPath);
@@ -111,7 +118,7 @@ export async function getYtDlp(): Promise<YTDlpWrap> {
 }
 
 /**
- * Extracts direct high-speed audio stream URL from YouTube.
+ * Extracts direct high-speed audio stream URL from YouTube using Android/iOS client to bypass bot checks.
  */
 export async function getDirectAudioStreamUrl(videoId: string): Promise<string | null> {
   try {
@@ -122,11 +129,20 @@ export async function getDirectAudioStreamUrl(videoId: string): Promise<string |
       "-g",
       "-f",
       "ba/b",
+      "--extractor-args",
+      "youtube:player_client=android,ios,web",
       "--no-playlist",
       "--no-warnings",
     ]);
-    const urls = output.trim().split("\n").map((u) => u.trim()).filter(Boolean);
-    return urls[0] || null;
+    const urls = output
+      .trim()
+      .split("\n")
+      .map((u) => u.trim())
+      .filter((u) => u.startsWith("http"));
+    
+    // Prioritize googlevideo stream URL
+    const streamUrl = urls.find((u) => u.includes("googlevideo.com")) || urls[0];
+    return streamUrl || null;
   } catch (err) {
     console.warn(`[Downloader] Failed to get direct stream URL for ${videoId}:`, err);
     return null;
@@ -210,6 +226,8 @@ export async function downloadYouTubeAudio(
             "mp3",
             "--audio-quality",
             "0",
+            "--extractor-args",
+            "youtube:player_client=android,ios,web",
             "--no-playlist",
             "--no-warnings",
             "--ffmpeg-location",
@@ -224,6 +242,8 @@ export async function downloadYouTubeAudio(
             videoUrl,
             "-f",
             "ba/b",
+            "--extractor-args",
+            "youtube:player_client=android,ios,web",
             "--no-playlist",
             "--no-warnings",
             "-o",
