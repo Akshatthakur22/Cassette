@@ -40,44 +40,33 @@ export async function POST(request: NextRequest) {
       where: { videoId: sanitizedId },
     });
 
-    // 2. Check if already ready and audio file actually exists on storage
+    // 2. Check if already ready in database
     if (song && song.status === "READY") {
-      let exists = await audioFileExists(sanitizedId, "mp3");
-      if (!exists) exists = await audioFileExists(sanitizedId, "m4a");
-      if (!exists) exists = await audioFileExists(sanitizedId, "webm");
-      if (!exists) exists = await audioFileExists(sanitizedId, "opus");
-
-      if (exists) {
-        // Track play / access
-        prisma.song
-          .update({
-            where: { id: song.id },
-            data: {
-              downloadCount: { increment: 1 },
-              lastPlayedAt: new Date(),
-            },
-          })
-          .catch(() => {});
-
-        return NextResponse.json({
-          success: true,
-          cached: true,
-          song: {
-            id: song.id,
-            videoId: song.videoId,
-            title: song.title,
-            artist: song.artist,
-            thumbnailUrl: song.thumbnailUrl,
-            durationSec: song.durationSec,
-            audioUrl: `/api/audio/${sanitizedId}`,
-            status: song.status,
+      // Track play / access
+      prisma.song
+        .update({
+          where: { id: song.id },
+          data: {
+            downloadCount: { increment: 1 },
+            lastPlayedAt: new Date(),
           },
-        });
-      }
+        })
+        .catch(() => {});
 
-      console.warn(
-        `[SongResolver] Record was READY but audio file was missing on disk for ${sanitizedId}. Re-downloading.`
-      );
+      return NextResponse.json({
+        success: true,
+        cached: true,
+        song: {
+          id: song.id,
+          videoId: song.videoId,
+          title: song.title,
+          artist: song.artist,
+          thumbnailUrl: song.thumbnailUrl,
+          durationSec: song.durationSec,
+          audioUrl: `/api/audio/${sanitizedId}`,
+          status: song.status,
+        },
+      });
     }
 
     // 3. Create or mark as DOWNLOADING
