@@ -1,13 +1,27 @@
 import { join } from "path";
+import { tmpdir } from "os";
 import { mkdir, stat, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 
 const AUDIO_DIR_NAME = "audio-library";
 
+export function isServerlessEnvironment(): boolean {
+  return Boolean(
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT ||
+    process.env.NODE_ENV === "production"
+  );
+}
+
 /**
  * Returns absolute directory path where audio files are stored.
+ * On serverless (Vercel / Lambda), process.cwd() is read-only, so we use /tmp.
  */
 export function getAudioStorageDir(): string {
+  if (isServerlessEnvironment()) {
+    return join(tmpdir(), AUDIO_DIR_NAME);
+  }
   return join(process.cwd(), "public", AUDIO_DIR_NAME);
 }
 
@@ -22,9 +36,9 @@ export function getAudioFilePath(videoId: string, ext = "mp3"): string {
 /**
  * Returns public URL path for client playback.
  */
-export function getAudioPublicUrl(videoId: string, ext = "mp3"): string {
+export function getAudioPublicUrl(videoId: string, _ext = "mp3"): string {
   const sanitizedId = videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-  return `/${AUDIO_DIR_NAME}/${sanitizedId}.${ext}`;
+  return `/api/audio/${sanitizedId}`;
 }
 
 /**

@@ -23,6 +23,14 @@ export async function GET(
       exists = await audioFileExists(sanitizedId, "m4a");
       if (exists) ext = "m4a";
     }
+    if (!exists) {
+      exists = await audioFileExists(sanitizedId, "webm");
+      if (exists) ext = "webm";
+    }
+    if (!exists) {
+      exists = await audioFileExists(sanitizedId, "opus");
+      if (exists) ext = "opus";
+    }
 
     if (!exists) {
       return new NextResponse("Audio file not found", { status: 404 });
@@ -31,7 +39,10 @@ export async function GET(
     const filePath = getAudioFilePath(sanitizedId, ext);
     const fileStats = await stat(filePath);
     const fileSize = fileStats.size;
-    const mimeType = ext === "m4a" ? "audio/mp4" : "audio/mpeg";
+    let mimeType = "audio/mpeg";
+    if (ext === "m4a") mimeType = "audio/mp4";
+    else if (ext === "webm") mimeType = "audio/webm";
+    else if (ext === "opus") mimeType = "audio/opus";
 
     const range = request.headers.get("range");
 

@@ -3,6 +3,14 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { mkdir, stat, chmod, unlink } from "fs/promises";
 
+import { tmpdir } from "os";
+import {
+  getAudioStorageDir,
+  getAudioFilePath,
+  getAudioPublicUrl,
+  isServerlessEnvironment,
+} from "@/lib/storage/audio-storage";
+
 export interface DownloadedAudioResult {
   videoId: string;
   title: string;
@@ -23,6 +31,7 @@ function getFfmpegLocation(): string | undefined {
     "/opt/homebrew/bin/ffmpeg",
     "/usr/local/bin/ffmpeg",
     "/usr/bin/ffmpeg",
+    "/var/task/node_modules/@ffmpeg-installer/ffmpeg/ffmpeg",
   ];
   for (const p of possiblePaths) {
     if (existsSync(p)) return p;
@@ -36,12 +45,14 @@ function getFfmpegLocation(): string | undefined {
 export async function getYtDlp(): Promise<YTDlpWrap> {
   if (ytDlpInstance) return ytDlpInstance;
 
-  const binDir = join(process.cwd(), ".bin");
+  const binDir = isServerlessEnvironment()
+    ? join(tmpdir(), "cassette-bin")
+    : join(process.cwd(), ".bin");
   await mkdir(binDir, { recursive: true });
   const binaryPath = join(binDir, "yt-dlp");
 
   if (!existsSync(binaryPath)) {
-    console.log("[Downloader] Downloading latest yt-dlp binary...");
+    console.log("[Downloader] Downloading latest yt-dlp binary to:", binaryPath);
     await YTDlpWrap.downloadFromGithub(binaryPath);
     await chmod(binaryPath, 0o755);
     console.log("[Downloader] yt-dlp binary ready at:", binaryPath);
@@ -80,12 +91,10 @@ export async function downloadYouTubeAudio(
   const downloadPromise = (async () => {
     try {
       console.log(`[Downloader] Starting audio download for videoId: ${sanitizedId}`);
-      const storageDir = join(process.cwd(), "public", "audio-library");
+      const storageDir = getAudioStorageDir();
       await mkdir(storageDir, { recursive: true });
 
-      const targetPath = join(storageDir, `${sanitizedId}.mp3`);
       const ytDlp = await getYtDlp();
-
       const videoUrl = `https://www.youtube.com/watch?v=${sanitizedId}`;
 
       let title = fallbackMeta?.title || "Audio Track";
@@ -94,26 +103,40 @@ export async function downloadYouTubeAudio(
       let thumbnailUrl =
         fallbackMeta?.thumbnailUrl || `https://i.ytimg.com/vi/${sanitizedId}/hqdefault.jpg`;
 
-      // Construct args
       const ffmpegPath = getFfmpegLocation();
-      const args = [
-        videoUrl,
-        "-f",
-        "ba/b",
-        "-x",
-        "--audio-format",
-        "mp3",
-        "--audio-quality",
-        "0",
-        "--no-playlist",
-        "--no-warnings",
-      ];
+      let targetPath = getAudioFilePath(sanitizedId, "mp3");
+      let args: string[];
 
       if (ffmpegPath) {
-        args.push("--ffmpeg-location", ffmpegPath);
+        args = [
+          videoUrl,
+          "-f",
+          "ba/b",
+          "-x",
+          "--audio-format",
+          "mp3",
+          "--audio-quality",
+          "0",
+          "--no-playlist",
+          "--no-warnings",
+          "--ffmpeg-location",
+          ffmpegPath,
+          "-o",
+          targetPath,
+        ];
+      } else {
+        // Without ffmpeg, download native stream container (m4a/webm/mp3)
+        const templatePath = join(storageDir, `${sanitizedId}.%(ext)s`);
+        args = [
+          videoUrl,
+          "-f",
+          "ba/b",
+          "--no-playlist",
+          "--no-warnings",
+          "-o",
+          templatePath,
+        ];
       }
-
-      args.push("-o", targetPath);
 
       // Clean up any stale partial target
       try {
@@ -128,13 +151,32 @@ export async function downloadYouTubeAudio(
       // Execute download
       await ytDlp.execPromise(args);
 
-      const s = await stat(targetPath);
+      // Identify the created file
+      let finalPath = targetPath;
+      let finalExt = "mp3";
+      if (!existsSync(finalPath)) {
+        for (const candidateExt of ["m4a", "webm", "opus", "mp3"]) {
+          const checkPath = getAudioFilePath(sanitizedId, candidateExt);
+          if (existsSync(checkPath)) {
+            finalPath = checkPath;
+            finalExt = candidateExt;
+            break;
+          }
+        }
+      }
+
+      const s = await stat(finalPath);
       if (s.size < 1024) {
         throw new Error(`Downloaded audio file is too small or corrupt (${s.size} bytes)`);
       }
 
+      let mimeType = "audio/mpeg";
+      if (finalExt === "m4a") mimeType = "audio/mp4";
+      else if (finalExt === "webm") mimeType = "audio/webm";
+      else if (finalExt === "opus") mimeType = "audio/opus";
+
       console.log(
-        `[Downloader] Audio download complete for ${sanitizedId}: size=${s.size} bytes, format=mp3`
+        `[Downloader] Audio download complete for ${sanitizedId}: size=${s.size} bytes, format=${finalExt}`
       );
 
       return {
@@ -143,8 +185,8 @@ export async function downloadYouTubeAudio(
         artist,
         thumbnailUrl,
         durationSec,
-        audioUrl: `/audio-library/${sanitizedId}.mp3`,
-        mimeType: "audio/mpeg",
+        audioUrl: getAudioPublicUrl(sanitizedId, finalExt),
+        mimeType,
         fileSizeBytes: s.size,
       };
     } finally {

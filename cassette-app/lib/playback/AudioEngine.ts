@@ -19,7 +19,7 @@ export function resolveAudioUrl(track: PlaybackTrack): string {
     return id.endsWith(".webm") ? `/voice-recordings/${id}` : `/voice-recordings/${id}.webm`;
   }
   const sanitizedId = id.replace(/[^a-zA-Z0-9_-]/g, "");
-  return `/audio-library/${sanitizedId}.mp3`;
+  return `/api/audio/${sanitizedId}`;
 }
 
 export class AudioEngine implements PlaybackEngine {

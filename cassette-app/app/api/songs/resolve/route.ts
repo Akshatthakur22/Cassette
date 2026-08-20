@@ -41,9 +41,11 @@ export async function POST(request: NextRequest) {
     });
 
     // 2. Check if already ready and audio file actually exists on storage
-    if (song && song.status === "READY" && song.audioUrl) {
-      const ext = song.audioUrl.endsWith(".m4a") ? "m4a" : "mp3";
-      const exists = await audioFileExists(sanitizedId, ext);
+    if (song && song.status === "READY") {
+      let exists = await audioFileExists(sanitizedId, "mp3");
+      if (!exists) exists = await audioFileExists(sanitizedId, "m4a");
+      if (!exists) exists = await audioFileExists(sanitizedId, "webm");
+      if (!exists) exists = await audioFileExists(sanitizedId, "opus");
 
       if (exists) {
         // Track play / access
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
             artist: song.artist,
             thumbnailUrl: song.thumbnailUrl,
             durationSec: song.durationSec,
-            audioUrl: song.audioUrl,
+            audioUrl: `/api/audio/${sanitizedId}`,
             status: song.status,
           },
         });
