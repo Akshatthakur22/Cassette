@@ -61,6 +61,20 @@ function verifyWorkerSecret(request: NextRequest): boolean {
 async function getPendingJobs(limit: number) {
   const now = new Date();
 
+  // Reset orphaned jobs stuck in VALIDATING for >2 minutes
+  await prisma.mediaAsset.updateMany({
+    where: {
+      status: "VALIDATING",
+      lastAttemptAt: {
+        lt: new Date(now.getTime() - 2 * 60 * 1000), // Older than 2 minutes
+      },
+    },
+    data: {
+      status: "PENDING",
+      error: "Worker timeout - retrying",
+    },
+  });
+
   const jobs = await prisma.mediaAsset.findMany({
     where: {
       OR: [
@@ -316,7 +330,7 @@ export async function POST(request: NextRequest) {
 
     // Get optional job limit from query
     const limit = request.nextUrl.searchParams.get("limit");
-    const jobLimit = limit ? parseInt(limit, 10) : 3;
+    const jobLimit = limit ? parseInt(limit, 10) : 10;
 
     log("info", "Processing triggered", { jobLimit });
 
@@ -329,11 +343,33 @@ export async function POST(request: NextRequest) {
     if (jobs.length > 0) {
       log("info", "Found pending jobs", { count: jobs.length });
 
-      // Process jobs sequentially
-      for (const job of jobs) {
-        const videoId = job.providerTrackId; // For YouTube provider
-        await processJob(job.id, videoId);
+      // Process jobs in parallel (up to 3 concurrent)
+      // This allows multiple downloads to happen simultaneously
+      const concurrency = 3;
+      const chunks = [];
+      for (let i = 0; i < jobs.length; i += concurrency) {
+        chunks.push(jobs.slice(i, i + concurrency));
       }
+
+      let processedCount = 0;
+      for (const chunk of chunks) {
+        log("info", "Processing chunk", { 
+          chunkSize: chunk.length, 
+          totalProcessed: processedCount 
+        });
+
+        // Process up to 3 jobs concurrently
+        await Promise.allSettled(
+          chunk.map(job => {
+            const videoId = job.providerTrackId;
+            return processJob(job.id, videoId);
+          })
+        );
+
+        processedCount += chunk.length;
+      }
+
+      log("info", "All jobs processed", { count: processedCount });
     } else {
       log("info", "No pending jobs");
     }
