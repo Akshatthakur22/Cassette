@@ -332,7 +332,7 @@ export async function POST(request: NextRequest) {
     const limit = request.nextUrl.searchParams.get("limit");
     const jobLimit = limit ? parseInt(limit, 10) : 10;
 
-    log("info", "Processing triggered", { jobLimit });
+    log("info", "✅ WORKER TRIGGERED - Processing jobs", { jobLimit, timestamp: new Date().toISOString() });
 
     // Ensure temp directory exists
     mkdirSync(CONFIG.tempDir, { recursive: true });
