@@ -38,12 +38,42 @@ export async function GET(
       );
     }
 
+    if (asset.status === "FAILED") {
+      return NextResponse.json(
+        { 
+          error: "This track failed to process. Please try adding it again.",
+          status: asset.status,
+        },
+        { 
+          status: 410,  // 410 Gone - won't be available
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          }
+        }
+      );
+    }
+
+    if (asset.status === "EXPIRED") {
+      return NextResponse.json(
+        { 
+          error: "This track has expired and is no longer available.",
+          status: asset.status,
+        },
+        { 
+          status: 410,  // 410 Gone - won't be available
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          }
+        }
+      );
+    }
+
     if (asset.status !== "READY") {
       // Return 202 Accepted for pending/processing assets
       // Frontend should retry after a delay
       return NextResponse.json(
         { 
-          error: `Media asset is being processed (status: ${asset.status})`,
+          error: `Track is being processed (status: ${asset.status}). Please wait...`,
           status: asset.status,
           retryAfter: 3000 // Suggest retry after 3 seconds
         },

@@ -170,6 +170,7 @@ model MediaAsset {
   tracks          TapeTrack[]
   
   @@index([status])
+  @@unique([provider, providerTrackId])  // Prevent duplicate jobs for same video
   @@index([provider, providerTrackId])  // Duplicate prevention
   @@index([expiresAt])
 }

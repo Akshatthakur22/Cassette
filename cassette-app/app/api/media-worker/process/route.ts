@@ -283,7 +283,7 @@ async function processJob(jobId: string, videoId: string): Promise<void> {
     const fileSize = getFileSize(mp3Path);
     log("info", "File validated", { checksum, fileSize });
 
-    // Step 6: Upload to R2
+    // Step 6: Upload to R2 (with 5-minute timeout)
     log("info", "Uploading to R2", { jobId });
     await updateJobStatus(jobId, "UPLOADING");
 
@@ -291,18 +291,33 @@ async function processJob(jobId: string, videoId: string): Promise<void> {
     let storageKey = `media-assets/${jobId}.mp3`;
 
     if (r2) {
-      const uploadResult = await r2.uploadMP3(mp3Path, jobId);
-      if (!uploadResult.success) {
-        log("warn", "R2 upload failed", { error: uploadResult.error });
-        await failJob(jobId, "R2 upload failed", uploadResult.error);
+      try {
+        // Add timeout wrapper for R2 upload
+        const uploadPromise = r2.uploadMP3(mp3Path, jobId);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("R2 upload timeout (5 minutes)")), 5 * 60 * 1000)
+        );
+
+        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]) as any;
+
+        if (!uploadResult.success) {
+          log("warn", "R2 upload failed", { error: uploadResult.error });
+          await failJob(jobId, `R2 upload failed: ${uploadResult.error}`, uploadResult.error);
+          cleanupJobDir(jobDir);
+          return;
+        }
+        await r2.close();
+      } catch (uploadError) {
+        const errorMsg = String(uploadError);
+        log("error", "R2 operation failed", { error: errorMsg });
+        await failJob(jobId, `R2 error: ${errorMsg}`, errorMsg);
         cleanupJobDir(jobDir);
         return;
       }
-      await r2.close();
     } else {
       log("warn", "R2 not configured, skipping upload");
       if (process.env.NODE_ENV === "production") {
-        await failJob(jobId, "R2 storage not configured");
+        await failJob(jobId, "R2 storage not configured", "Missing R2 credentials in environment");
         cleanupJobDir(jobDir);
         return;
       }
