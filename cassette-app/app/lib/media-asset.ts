@@ -6,7 +6,8 @@
 export async function triggerMediaAssetProcessing(mediaAssetId: string) {
   try {
     // Build the correct URL for server-side fetch
-    let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    // Use NEXT_PUBLIC_DOMAIN (production URL) or construct from VERCEL_URL
+    let baseUrl = process.env.NEXT_PUBLIC_DOMAIN || process.env.NEXT_PUBLIC_BASE_URL;
     
     if (!baseUrl) {
       // Fallback: construct from environment
