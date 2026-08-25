@@ -1,35 +1,126 @@
-import { NextRequest, NextResponse } from "next/server";
-import { searchYouTubeTrack } from "@/app/lib/youtube-enhanced";
-import { checkRateLimitSimple } from "@/app/lib/rate-limit";
+/**
+ * GET /api/search
+ * Search for songs from YouTube and local library
+ * 
+ * Query params:
+ * - q: search query
+ * - source: 'youtube' | 'library' | 'all'
+ * - limit: max results (default 20, max 50)
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/app/lib/prisma';
+
+// You'll need to implement YouTube search
+async function searchYouTube(query: string, limit: number) {
+  try {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) {
+      console.warn('[search] YouTube API key not configured');
+      return [];
+    }
+
+    const response = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query)}&type=video&maxResults=${limit}&key=${apiKey}`
+    );
+
+    if (!response.ok) {
+      console.error('[search] YouTube API error:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+
+    return (data.items || []).map((item: any) => ({
+      id: item.id.videoId,
+      title: item.snippet.title,
+      artist: item.snippet.channelTitle,
+      thumbnailUrl: item.snippet.thumbnails?.medium?.url,
+      source: 'youtube' as const,
+    }));
+  } catch (error) {
+    console.error('[search] YouTube search error:', error);
+    return [];
+  }
+}
+
+// Search local library
+async function searchLibrary(query: string, limit: number) {
+  try {
+    const songs = await prisma.mediaAsset.findMany({
+      where: {
+        AND: [
+          { status: 'READY' },
+          {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' } },
+              { artist: { contains: query, mode: 'insensitive' } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        durationSec: true,
+        status: true,
+        storageKey: true,
+      },
+      take: limit,
+    });
+
+    return songs.map((song) => ({
+      id: song.id,
+      title: song.title,
+      artist: song.artist || 'Unknown',
+      durationSec: song.durationSec || 0,
+      status: song.status,
+      source: 'library' as const,
+      storageKey: song.storageKey,
+    }));
+  } catch (error) {
+    console.error('[search] Library search error:', error);
+    return [];
+  }
+}
 
 export async function GET(request: NextRequest) {
-  // Rate limiting: 30 searches per IP per minute
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
-  const rateLimitKey = `search:${ip}`;
-
-  if (!checkRateLimitSimple(rateLimitKey, 30, 60_000)) {
-    return NextResponse.json(
-      { error: "Too many searches. Please try again in a moment." },
-      { status: 429, headers: { "Retry-After": "60" } }
-    );
-  }
-
-  const { searchParams } = new URL(request.url);
-  const title = searchParams.get("title")?.trim();
-  const artist = searchParams.get("artist")?.trim();
-
-  if (!title) {
-    return NextResponse.json({ error: "title query param required" }, { status: 400 });
-  }
-
   try {
-    const results = await searchYouTubeTrack(title, artist ?? undefined);
-    return NextResponse.json({ results });
+    const searchParams = request.nextUrl.searchParams;
+    const query = searchParams.get('q');
+    const source = (searchParams.get('source') || 'all') as 'youtube' | 'library' | 'all';
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50);
+
+    if (!query || query.trim().length < 2) {
+      return NextResponse.json(
+        { error: 'Query must be at least 2 characters' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[search] Query: "${query}", source: ${source}, limit: ${limit}`);
+
+    let songs: any[] = [];
+
+    if (source === 'all' || source === 'library') {
+      const librarySongs = await searchLibrary(query, limit);
+      songs = [...songs, ...librarySongs];
+    }
+
+    if (source === 'all' || source === 'youtube') {
+      const youtubeSongs = await searchYouTube(query, limit);
+      songs = [...songs, ...youtubeSongs];
+    }
+
+    return NextResponse.json({
+      query,
+      source,
+      count: songs.length,
+      songs: songs.slice(0, limit),
+    });
   } catch (error) {
-    console.error("Search API error:", error);
-    return NextResponse.json({ error: "Search failed" }, { status: 500 });
+    console.error('[search] Error:', error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
