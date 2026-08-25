@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile, unlink, mkdir } from "fs/promises";
 import { join } from "path";
 import { prisma } from "@/app/lib/prisma";
 import { createR2ClientFromEnv } from "@/app/services/media-worker/storage";
@@ -36,11 +36,23 @@ import { nanoid } from "nanoid";
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const TEMP_DIR = "/tmp/cassette-direct-upload";
 
+// Ensure temp directory exists
+async function ensureTempDir() {
+  try {
+    await mkdir(TEMP_DIR, { recursive: true });
+  } catch (e) {
+    console.warn("Could not create temp directory:", e);
+  }
+}
+
 export async function POST(request: NextRequest) {
   let tempFilePath: string | null = null;
 
   try {
     console.log("[DIRECT_UPLOAD] Starting direct MP3 upload...");
+
+    // Ensure temp directory exists
+    await ensureTempDir();
 
     // Parse multipart form data
     const formData = await request.formData();
