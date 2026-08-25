@@ -53,9 +53,14 @@ export async function convertToMP3(
       ]);
 
       let stderr = "";
+      let stdout = "";
 
       proc.stderr?.on("data", (data) => {
         stderr += data.toString();
+      });
+
+      proc.stdout?.on("data", (data) => {
+        stdout += data.toString();
       });
 
       proc.on("close", (code) => {
@@ -64,30 +69,57 @@ export async function convertToMP3(
         if (code === 0 && existsSync(outputPath)) {
           const fileSize = statSync(outputPath).size;
           if (fileSize > 0) {
+            console.log(`[convertToMP3] Conversion successful: ${fileSize} bytes`);
             resolve({ success: true });
           } else {
+            console.error("[convertToMP3] Output file is empty");
             resolve({ success: false, error: "Output file is empty" });
           }
         } else {
-          resolve({
-            success: false,
-            error: stderr || "Conversion failed",
-          });
+          const errorMsg = stderr.substring(0, 200);
+          console.error("[convertToMP3] FFmpeg failed (code: " + code + "):", errorMsg);
+
+          // Detect specific conversion errors
+          const lowerError = (stderr + stdout).toLowerCase();
+
+          if (lowerError.includes("codec") || lowerError.includes("unknown encoder")) {
+            resolve({
+              success: false,
+              error: "FFmpeg codec error - MP3 encoder not available",
+            });
+          } else if (lowerError.includes("input/output")) {
+            resolve({
+              success: false,
+              error: "Input/output error - check file permissions",
+            });
+          } else if (lowerError.includes("stream")) {
+            resolve({
+              success: false,
+              error: "No audio stream found in input file",
+            });
+          } else {
+            resolve({
+              success: false,
+              error: errorMsg || "Conversion failed",
+            });
+          }
         }
       });
 
       proc.on("error", (error) => {
         clearTimeout(timeout);
+        console.error("[convertToMP3] Process error:", error);
         resolve({
           success: false,
-          error: String(error),
+          error: `FFmpeg error: ${String(error).substring(0, 100)}`,
         });
       });
     } catch (error) {
       clearTimeout(timeout);
+      console.error("[convertToMP3] Catch error:", error);
       resolve({
         success: false,
-        error: String(error),
+        error: `Error: ${String(error).substring(0, 100)}`,
       });
     }
   });
@@ -106,12 +138,24 @@ export async function validateMP3(filePath: string): Promise<ValidationResult> {
     const duration = Math.round(parseFloat(result.trim()));
 
     if (duration > 0) {
+      console.log(`[validateMP3] MP3 validated: ${duration}s duration`);
       return { valid: true, duration };
     } else {
+      console.warn(`[validateMP3] Invalid duration: ${result.trim()}`);
       return { valid: false, error: "Invalid duration" };
     }
   } catch (error) {
-    return { valid: false, error: String(error) };
+    console.error(`[validateMP3] Validation error:`, error);
+    const errorStr = String(error);
+    
+    // Detect specific errors
+    if (errorStr.includes("not found") || errorStr.includes("No such file")) {
+      return { valid: false, error: "File not found" };
+    } else if (errorStr.includes("invalid data")) {
+      return { valid: false, error: "File is corrupted or not an MP3" };
+    } else {
+      return { valid: false, error: `Validation failed: ${errorStr.substring(0, 80)}` };
+    }
   }
 }
 

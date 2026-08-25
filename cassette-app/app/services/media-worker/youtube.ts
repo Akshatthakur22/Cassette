@@ -42,15 +42,20 @@ export async function validateYouTubeVideo(
         duration: info.duration,
       });
     } catch (error: any) {
-      const errorMsg = String(error);
+      const errorMsg = String(error).toLowerCase();
+      const fullError = String(error);
+
+      console.log(`[validateYouTubeVideo] Validation error for ${videoId}:`, fullError.substring(0, 200));
 
       // Copyright detection
       if (
         errorMsg.includes("copyright") ||
         errorMsg.includes("music licensing") ||
         errorMsg.includes("rights holder") ||
-        errorMsg.includes("ERROR 403") ||
-        errorMsg.includes("HTTP Error 403")
+        errorMsg.includes("blocked") ||
+        errorMsg.includes("error 403") ||
+        errorMsg.includes("403 forbidden") ||
+        errorMsg.includes("unavailable")
       ) {
         resolve({ 
           valid: false, 
@@ -58,23 +63,32 @@ export async function validateYouTubeVideo(
         });
       }
       // Deleted videos
-      else if (errorMsg.includes("not found")) {
+      else if (errorMsg.includes("not found") || errorMsg.includes("deleted") || errorMsg.includes("removed")) {
         resolve({ valid: false, error: "Video not found" });
       } 
       // Geo-restriction
-      else if (errorMsg.includes("georestricted")) {
+      else if (errorMsg.includes("georestricted") || errorMsg.includes("geo-blocked") || errorMsg.includes("not available in your country")) {
         resolve({ valid: false, error: "Video is geo-restricted" });
       } 
       // Age-restriction
-      else if (errorMsg.includes("age")) {
+      else if (errorMsg.includes("age restricted") || errorMsg.includes("age-restricted")) {
         resolve({ valid: false, error: "Video is age-restricted" });
       }
       // Playback restrictions
-      else if (errorMsg.includes("embed") || errorMsg.includes("playback")) {
+      else if (errorMsg.includes("embed") || errorMsg.includes("playback") || errorMsg.includes("restricted")) {
         resolve({ valid: false, error: "Video playback is restricted by owner" });
+      }
+      // Private videos
+      else if (errorMsg.includes("private")) {
+        resolve({ valid: false, error: "Video is private" });
+      }
+      // Network/timeout issues
+      else if (errorMsg.includes("timeout") || errorMsg.includes("network")) {
+        resolve({ valid: false, error: "Network error - cannot reach video" });
       }
       // Catch-all
       else {
+        console.warn(`[validateYouTubeVideo] Unclassified error: ${fullError.substring(0, 150)}`);
         resolve({ valid: false, error: "Cannot access video" });
       }
     }
@@ -157,60 +171,94 @@ export async function downloadYouTubeAudio(
           }
         } else {
           // Detect specific error types from stderr
-          const lowerError = (stderr + stdout).toLowerCase();
+          const combinedError = (stderr + stdout).toLowerCase();
 
-          // Copyright detection
+          console.log(`[downloadYouTubeAudio] Download failed (code ${code}):`, {
+            stderr: stderr.substring(0, 200),
+            stdout: stdout.substring(0, 200),
+          });
+
+          // Copyright detection (most common)
           if (
-            lowerError.includes("copyright") ||
-            lowerError.includes("music licensing") ||
-            lowerError.includes("content from") ||
+            combinedError.includes("copyright") ||
+            combinedError.includes("music licensing") ||
+            combinedError.includes("content from") ||
+            combinedError.includes("blocked") ||
+            combinedError.includes("blocked in your country") ||
             stderr.includes("ERROR 403") ||
             stderr.includes("403 Forbidden")
           ) {
-            console.error("[downloadYouTubeAudio] Copyright strike detected");
+            console.error("[downloadYouTubeAudio] Copyright/blocked content detected");
             resolve({
               success: false,
               error: "Video contains copyrighted content",
             });
           }
           // Age restriction
-          else if (lowerError.includes("age")) {
+          else if (
+            combinedError.includes("age") ||
+            combinedError.includes("age-restricted") ||
+            combinedError.includes("age restricted")
+          ) {
             resolve({
               success: false,
               error: "Video is age-restricted",
             });
           }
           // Geo-restriction
-          else if (lowerError.includes("geo")) {
+          else if (
+            combinedError.includes("geo") ||
+            combinedError.includes("georestricted") ||
+            combinedError.includes("geo-blocked") ||
+            combinedError.includes("not available in your country")
+          ) {
             resolve({
               success: false,
               error: "Video is geo-restricted",
             });
           }
-          // Deleted
-          else if (lowerError.includes("not found") || lowerError.includes("deleted")) {
+          // Deleted/Private
+          else if (
+            combinedError.includes("not found") ||
+            combinedError.includes("deleted") ||
+            combinedError.includes("private") ||
+            combinedError.includes("removed") ||
+            combinedError.includes("unavailable")
+          ) {
             resolve({
               success: false,
               error: "Video not found",
             });
           }
           // Playback restrictions
-          else if (lowerError.includes("playback") || lowerError.includes("embed")) {
+          else if (
+            combinedError.includes("playback") ||
+            combinedError.includes("embed") ||
+            combinedError.includes("restricted")
+          ) {
             resolve({
               success: false,
               error: "Video playback is restricted",
             });
           }
-          // Generic error
-          else {
-            console.error("[downloadYouTubeAudio] yt-dlp error:", {
-              code,
-              stderr,
-              stdout,
-            });
+          // Network/timeout errors
+          else if (
+            combinedError.includes("timeout") ||
+            combinedError.includes("connection") ||
+            combinedError.includes("network")
+          ) {
             resolve({
               success: false,
-              error: stderr || stdout || "Download failed",
+              error: "Network error during download",
+            });
+          }
+          // Generic error - include partial stderr for debugging
+          else {
+            const errorDetail = stderr.substring(0, 100) || stdout.substring(0, 100) || "Unknown error";
+            console.error("[downloadYouTubeAudio] Unclassified error:", errorDetail);
+            resolve({
+              success: false,
+              error: errorDetail || "Download failed",
             });
           }
         }
@@ -221,7 +269,7 @@ export async function downloadYouTubeAudio(
         console.error("[downloadYouTubeAudio] Process error:", error);
         resolve({
           success: false,
-          error: String(error),
+          error: `Process error: ${String(error).substring(0, 100)}`,
         });
       });
     } catch (error) {
@@ -229,7 +277,7 @@ export async function downloadYouTubeAudio(
       console.error("[downloadYouTubeAudio] Catch error:", error);
       resolve({
         success: false,
-        error: String(error),
+        error: `Error: ${String(error).substring(0, 100)}`,
       });
     }
   });

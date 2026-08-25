@@ -5,15 +5,16 @@
  */
 export async function triggerMediaAssetProcessing(mediaAssetId: string) {
   try {
-    // Build the correct URL for server-side fetch
-    // Use NEXT_PUBLIC_DOMAIN (production URL) or construct from VERCEL_URL
-    let baseUrl = process.env.NEXT_PUBLIC_DOMAIN || process.env.NEXT_PUBLIC_BASE_URL;
+    // CRITICAL: Always use production domain for worker trigger
+    // This ensures new songs can be processed even when deployed to preview URLs
+    // Production URL must be publicly accessible without auth
+    let baseUrl = "https://cassette-share.vercel.app";
     
-    if (!baseUrl) {
-      // Fallback: construct from environment
-      const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
-      const host = process.env.VERCEL_URL || "localhost:3000";
-      baseUrl = `${protocol}://${host}`;
+    // Override with explicit env var if set (for self-hosted deployments)
+    if (process.env.WORKER_TRIGGER_URL) {
+      baseUrl = process.env.WORKER_TRIGGER_URL;
+    } else if (process.env.NEXT_PUBLIC_DOMAIN) {
+      baseUrl = process.env.NEXT_PUBLIC_DOMAIN;
     }
 
     const url = `${baseUrl}/api/media-worker/process`;
