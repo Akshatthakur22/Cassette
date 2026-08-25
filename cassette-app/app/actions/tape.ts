@@ -200,18 +200,44 @@ export async function addTrack(draftId: string, track: TrackInput) {
   const tape = await getVerifiedTape(draftId);
   if (!tape) return { error: "Unauthorized." };
 
-  // Enforce 12-per-side limit
+  // ──── VALIDATION 1: Track duration constraints ────────────────────────────
+  const {
+    validateTrackDuration,
+    validateTapeCapacity,
+    canFitOnSide,
+  } = await import("@/app/lib/audio-validation");
+
+  const durationValidation = validateTrackDuration(track.durationSec);
+  if (!durationValidation.valid) {
+    return { error: durationValidation.error };
+  }
+
+  // ──── VALIDATION 2: Check side capacity ──────────────────────────────────
   const sideCount = await prisma.tapeTrack.count({
     where: { tapeId: draftId, side: track.side },
   });
-  if (sideCount >= 12) {
-    return { error: `Side ${track.side} is full (12 tracks max).` };
+
+  const sideTracks = await prisma.tapeTrack.findMany({
+    where: { tapeId: draftId, side: track.side },
+    select: { durationSec: true },
+  });
+
+  const totalSideDuration = sideTracks.reduce((sum, t) => sum + (t.durationSec || 0), 0);
+  const capacityCheck = canFitOnSide(
+    totalSideDuration,
+    track.durationSec || 0,
+    sideCount
+  );
+
+  if (!capacityCheck.canFit) {
+    return { error: capacityCheck.reason };
   }
 
   let durationSec = track.durationSec;
   let trackTitle = track.title;
   let trackArtist = track.artist ?? null;
   let trackThumbnail = track.thumbnailUrl ?? null;
+  let mediaAssetId: string | null = null;
 
   if ((!track.provider || track.provider === "youtube") && track.providerTrackId) {
     try {
@@ -220,15 +246,57 @@ export async function addTrack(draftId: string, track: TrackInput) {
       if (!validation.isValid) {
         return { error: validation.error || "This YouTube video is unavailable or restricted." };
       }
+
+      // ──── VALIDATION 3: Double-check duration after YouTube validation ────
       if (validation.durationSec) {
         durationSec = validation.durationSec;
+        const recheck = validateTrackDuration(durationSec);
+        if (!recheck.valid) {
+          return { error: recheck.error };
+        }
       }
+
       if (validation.thumbnailUrl && !trackThumbnail) {
         trackThumbnail = validation.thumbnailUrl;
       }
       if (validation.channelTitle && !trackArtist) {
         trackArtist = validation.channelTitle;
       }
+
+      // ──── NEW: Create MediaAsset for YouTube tracks ─────────────────────────
+      const {
+        findExistingMediaAsset,
+        createMediaAsset,
+        triggerMediaAssetProcessing,
+      } = await import("@/app/lib/media-asset");
+
+      // Check if we already have a processing job for this video
+      const existing = await findExistingMediaAsset(track.providerTrackId);
+      if (existing) {
+        mediaAssetId = existing.id;
+      } else {
+        // Create new MediaAsset job
+        const asset = await createMediaAsset(
+          track.providerTrackId,
+          trackTitle,
+          trackArtist,
+          durationSec ?? 0
+        );
+        mediaAssetId = asset.id;
+        console.log("[addTrack] Created MediaAsset job:", {
+          mediaAssetId: asset.id,
+          videoId: track.providerTrackId,
+          title: trackTitle,
+          durationSec,
+        });
+
+        // Immediately trigger processing (don't wait for polling cycle)
+        triggerMediaAssetProcessing(asset.id).catch(() => {
+          // If trigger fails, worker will pick it up in next cycle
+          console.debug("[addTrack] Worker trigger skipped, will poll later");
+        });
+      }
+      // ──────────────────────────────────────────────────────────────────────
     } catch (e) {
       console.warn("[addTrack] Validation warning:", e);
     }
@@ -242,8 +310,9 @@ export async function addTrack(draftId: string, track: TrackInput) {
       title:           trackTitle,
       artist:          trackArtist,
       thumbnailUrl:    trackThumbnail,
-      provider:        track.provider ?? "youtube",
-      providerTrackId: track.providerTrackId,
+      provider:        mediaAssetId ? "media_asset" : (track.provider ?? "youtube"),
+      providerTrackId: mediaAssetId ?? track.providerTrackId,
+      mediaAssetId:    mediaAssetId,
       personalNote:    track.personalNote?.slice(0, 280) ?? null,
       durationSec:     durationSec ?? null,
     },
@@ -254,9 +323,12 @@ export async function addTrack(draftId: string, track: TrackInput) {
   trackEvent(tape.senderName, EVENTS.TRACK_ADDED, {
     side: track.side,
     title: track.title,
+    provider: created.provider,
+    mediaAssetId: mediaAssetId ? created.provider : undefined,
+    durationSec: durationSec,
   }).catch(err => console.warn("PostHog tracking error:", err));
 
-  return { ok: true, track: created };
+  return { ok: true, track: created, mediaAssetId };
 }
 
 // ─── addTracksFromPlaylist ──────────────────────────────────────────────────
@@ -293,6 +365,14 @@ export async function addTracksFromPlaylist(
   let sideBPos = sideBCounts.length > 0 ? sideBCounts[0].position + 1 : 0;
 
   const createdTracks = [];
+  const mediaAssetIds: string[] = [];
+
+  // Import once, outside loop
+  const {
+    findExistingMediaAsset,
+    createMediaAsset,
+    triggerMediaAssetProcessing,
+  } = await import("@/app/lib/media-asset");
 
   for (const item of items) {
     // Try to add to whichever side has fewer tracks
@@ -312,6 +392,31 @@ export async function addTracksFromPlaylist(
       continue;
     }
 
+    let mediaAssetId: string | null = null;
+
+    // Create MediaAsset for YouTube track
+    try {
+      const existing = await findExistingMediaAsset(item.videoId);
+      if (existing) {
+        mediaAssetId = existing.id;
+      } else {
+        const asset = await createMediaAsset(
+          item.videoId,
+          item.title,
+          item.channelTitle ?? null,
+          item.durationSec ?? 0
+        );
+        mediaAssetId = asset.id;
+
+        // Immediately trigger processing
+        triggerMediaAssetProcessing(asset.id).catch(() => {
+          console.debug(`[addTracksFromPlaylist] Worker trigger skipped for ${asset.id}`);
+        });
+      }
+    } catch (err) {
+      console.warn(`[addTracksFromPlaylist] MediaAsset creation failed for ${item.videoId}:`, err);
+    }
+
     const created = await prisma.tapeTrack.create({
       data: {
         tapeId:          draftId,
@@ -320,13 +425,17 @@ export async function addTracksFromPlaylist(
         title:           item.title,
         artist:          item.channelTitle ?? null,
         thumbnailUrl:    item.thumbnail ?? null,
-        provider:        "youtube",
-        providerTrackId: item.videoId,
+        provider:        mediaAssetId ? "media_asset" : "youtube",
+        providerTrackId: mediaAssetId ?? item.videoId,
+        mediaAssetId:    mediaAssetId,
         durationSec:     item.durationSec ?? null,
       },
     });
 
     createdTracks.push(created);
+    if (mediaAssetId) {
+      mediaAssetIds.push(mediaAssetId);
+    }
   }
 
   await prisma.tape.update({
@@ -678,5 +787,110 @@ export async function recordContentReport(
   } catch (error) {
     console.error("Error recording report:", error);
     return { error: "Failed to submit report" };
+  }
+}
+
+// ─── Media Asset Management ─────────────────────────────────────────────────
+
+/**
+ * Get MediaAsset status for a given media asset ID
+ * Used for client-side polling during processing
+ */
+export async function getMediaAssetStatus(mediaAssetId: string) {
+  try {
+    const { getMediaAssetStatus: getStatus } = await import("@/app/lib/media-asset");
+    const status = await getStatus(mediaAssetId);
+    return status;
+  } catch (error) {
+    console.error("[getMediaAssetStatus] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Retry a failed MediaAsset processing job
+ * Only works if status is FAILED and attemptCount < MAX_RETRIES
+ */
+export async function retryMediaAsset(mediaAssetId: string) {
+  try {
+    const { prisma } = await import("@/app/lib/prisma");
+    const {
+      shouldRetry,
+      calculateBackoffDelay,
+      updateMediaAssetStatus,
+    } = await import("@/app/lib/media-asset");
+
+    const asset = await prisma.mediaAsset.findUnique({
+      where: { id: mediaAssetId },
+      select: {
+        id: true,
+        status: true,
+        attemptCount: true,
+        providerTrackId: true,
+      },
+    });
+
+    if (!asset) {
+      return { error: "Media asset not found." };
+    }
+
+    const maxRetries = parseInt(process.env.MAX_RETRIES || "3", 10);
+
+    if (!shouldRetry(asset.status as any, asset.attemptCount, maxRetries)) {
+      return {
+        error: `Cannot retry: status is ${asset.status}. Max retries (${maxRetries}) may have been exceeded.`,
+      };
+    }
+
+    // Calculate next attempt time with exponential backoff
+    const baseDelayMs = (parseInt(process.env.RETRY_BACKOFF_BASE_MINUTES || "1", 10)) * 60 * 1000;
+    const nextAttemptMs = calculateBackoffDelay(asset.attemptCount + 1, baseDelayMs);
+    const nextAttemptAt = new Date(Date.now() + nextAttemptMs);
+
+    // Update status to PENDING and schedule retry
+    await prisma.mediaAsset.update({
+      where: { id: mediaAssetId },
+      data: {
+        status: "PENDING",
+        nextAttemptAt,
+        attemptCount: asset.attemptCount + 1,
+      },
+    });
+
+    console.log("[retryMediaAsset] Scheduled retry:", {
+      mediaAssetId,
+      nextAttemptAt,
+      attemptCount: asset.attemptCount + 1,
+    });
+
+    return { ok: true, nextAttemptAt };
+  } catch (error) {
+    console.error("[retryMediaAsset] Error:", error);
+    return { error: "Failed to schedule retry." };
+  }
+}
+
+/**
+ * Check media asset status and get user-friendly error message if failed
+ */
+export async function getMediaAssetError(mediaAssetId: string) {
+  try {
+    const { prisma } = await import("@/app/lib/prisma");
+    const { getUserFriendlyError } = await import("@/app/lib/media-asset");
+
+    const asset = await prisma.mediaAsset.findUnique({
+      where: { id: mediaAssetId },
+      select: {
+        status: true,
+        error: true,
+      },
+    });
+
+    if (!asset) return null;
+
+    return getUserFriendlyError(asset as any);
+  } catch (error) {
+    console.error("[getMediaAssetError] Error:", error);
+    return "Unable to process this track.";
   }
 }

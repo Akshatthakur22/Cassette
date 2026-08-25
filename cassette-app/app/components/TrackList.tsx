@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { type Track, formatDuration } from "@/app/lib/fake-data";
+import { MediaAssetStatusBadge } from "./MediaAssetStatusBadge";
+import { useMediaAssetPoller } from "@/app/hooks/useMediaAssetPoller";
 
 interface TrackListProps {
   tracks: Track[];
@@ -12,6 +14,7 @@ interface TrackListProps {
   onSelectTrack: (index: number) => void;
   accentColor?: string;
   senderName?: string;
+  mediaAssetStates?: Record<string, any>; // Media asset status for each track
 }
 
 export default function TrackList({
@@ -22,6 +25,7 @@ export default function TrackList({
   onSelectTrack,
   accentColor = "#D4882A",
   senderName = "Sender",
+  mediaAssetStates = {},
 }: TrackListProps) {
   const sideTracks = tracks.filter(t => t.side === side);
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({});
@@ -80,8 +84,10 @@ export default function TrackList({
               const globalIndex = tracks.findIndex(t => t.id === track.id);
               const isActive = globalIndex === currentIndex;
               const isVoice = (track as any).provider === "voice" || track.title.startsWith("Voice Recording");
+              const isMediaAsset = (track as any).provider === "media_asset";
               const hasNote = Boolean(track.personalNote?.trim());
-              const isNoteOpen = expandedNotes[track.id] ?? true; // Default open to show personal touches!
+              const isNoteOpen = expandedNotes[track.id] ?? true;
+              const mediaAssetState = mediaAssetStates[track.id];
 
               return (
                 <div
@@ -128,6 +134,21 @@ export default function TrackList({
                             <span>Voice Note</span>
                           </span>
                         )}
+
+                        {isMediaAsset && (
+                          <span
+                            className="text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold border flex items-center gap-0.5"
+                            style={{
+                              background: "#E0E7FF",
+                              borderColor: "#818CF8",
+                              color: "#4F46E5",
+                            }}
+                          >
+                            <span>🎵</span>
+                            <span>MP3</span>
+                          </span>
+                        )}
+
                         <p
                           className="text-xs sm:text-sm leading-snug truncate"
                           style={{
@@ -146,6 +167,17 @@ export default function TrackList({
                       >
                         {track.artist || "Unknown Artist"}
                       </p>
+
+                      {mediaAssetState && (
+                        <div className="mt-2">
+                          <MediaAssetStatusBadge
+                            status={mediaAssetState.status}
+                            mediaAssetId={mediaAssetState.id}
+                            progress={mediaAssetState.progress}
+                            error={mediaAssetState.error}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* Duration & Note toggle button */}

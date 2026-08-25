@@ -60,13 +60,19 @@ model TapeTrack {
   title           String
   artist          String?
   thumbnailUrl    String?
-  provider        String   @default("youtube")
+  provider        String   @default("youtube") // "youtube" | "voice" | "media_asset"
   providerTrackId String
   personalNote    String?
   durationSec     Int?
+  
+  // NEW: Direct reference to processed media asset (for provider="media_asset")
+  mediaAssetId    String?
+  mediaAsset      MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  
   createdAt       DateTime @default(now())
 
   @@index([tapeId])
+  @@index([mediaAssetId])
 }
 
 model ShareEvent {
@@ -117,6 +123,57 @@ model YoutubePlaylistCache {
 
   @@index([expiresAt])
 }
+
+// Media asset processing and storage tracking
+model MediaAsset {
+  id              String   @id @default(cuid())
+  
+  // Source identification
+  provider        String   // "youtube"
+  providerTrackId String   // YouTube video ID
+  
+  // Metadata
+  title           String
+  artist          String?
+  durationSec     Int      // Original duration from source
+  
+  // Processing state
+  status          String   @default("PENDING")
+  // Values: PENDING | VALIDATING | DOWNLOADING | CONVERTING | UPLOADING | READY | FAILED | EXPIRED
+  
+  // Attempt tracking (retries)
+  attemptCount    Int      @default(0)
+  lastAttemptAt   DateTime?
+  nextAttemptAt   DateTime?
+  
+  // Error tracking
+  error           String?  // Last error message (user-friendly)
+  errorDetails    String?  // Full technical error details
+  
+  // Storage
+  storageProvider String?  // "r2" (for future multi-cloud support)
+  storageKey      String?  // Path/key in R2 bucket: "media-assets/{id}.mp3"
+  mimeType        String?  // "audio/mpeg"
+  fileSize        Int?     // Bytes
+  checksum        String?  // SHA-256 hash for integrity verification
+  
+  // Playback compatibility
+  bitrate         Int?     // kbps (e.g., 128)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  processedAt     DateTime? // When processing completed
+  expiresAt       DateTime? // For temp storage cleanup
+  
+  // Relationships
+  tracks          TapeTrack[]
+  
+  @@index([status])
+  @@index([provider, providerTrackId])  // Duplicate prevention
+  @@index([expiresAt])
+}
+
 model ContentReport {
   id                String   @id @default(cuid())
   tapeId            String

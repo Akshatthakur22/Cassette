@@ -24,6 +24,8 @@ import { useReduceMotion } from "@/app/lib/use-reduce-motion";
 import { useWakeLock } from "@/app/lib/useWakeLock";
 import { MediaSessionInit } from "@/lib/playback/MediaSessionInit";
 import { getStableImageNumber } from "@/app/lib/accessibility";
+import { useMediaAssetStates } from "@/app/hooks/useMediaAssetStates";
+import { getEagerPreloadService } from "@/lib/playback/eager-preload";
 
 interface Props {
   tape: TapeWithTracks;
@@ -74,6 +76,13 @@ function EmptyScreen({ isPreview }: { isPreview: boolean }) {
 
 export default function TapeViewClient({ tape, isPreview = false }: Props) {
   const reduceMotion = useReduceMotion();
+
+  // Media asset states polling - DISABLED (polling disabled)
+  // Hook still called but with enabled=false, so it returns empty object
+  const mediaAssetStates = useMediaAssetStates({
+    tracks: tape.tracks as any,
+    enabled: false, // DO NOT ENABLE - causes continuous polling spam
+  });
 
   // Gate + playback state
   const [opened, setOpened] = useState(isPreview);
@@ -134,8 +143,26 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
           playlistName: tape.playlistName,
         })
       );
+
+      // EAGER PRELOAD: Start loading all YouTube tracks immediately
+      // Use mediaAssetId if available (from new system), otherwise use providerTrackId
+      const youtubeMediaAssetIds = (tape.tracks as TrackRow[])
+        .filter((t) => (t as any).mediaAssetId || t.provider === "youtube")
+        .map((t) => {
+          // If we have mediaAssetId, use it (preferred)
+          if ((t as any).mediaAssetId) return (t as any).mediaAssetId;
+          // Otherwise use providerTrackId (YouTube video ID)
+          return (t as any).providerTrackId;
+        })
+        .filter(Boolean);
+
+      if (youtubeMediaAssetIds.length > 0) {
+        const eagerPreload = getEagerPreloadService();
+        eagerPreload.preloadAllTracks(youtubeMediaAssetIds);
+        console.debug(`[TapeViewClient] Started eager preload for ${youtubeMediaAssetIds.length} tracks`);
+      }
     }
-  }, [tape.id, isPreview, tape.playlistSourceId, tape.playlistSourceUrl, tape.playlistName]);
+  }, [tape.id, isPreview, tape.playlistSourceId, tape.playlistSourceUrl, tape.playlistName, tape.tracks]);
 
   // Error handler
   useEffect(() => {
@@ -733,6 +760,7 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
                 onSelectTrack={handleSelectTrack}
                 accentColor={accentColor}
                 senderName={tape.senderName}
+                mediaAssetStates={mediaAssetStates}
               />
             </motion.div>
           )}

@@ -9,6 +9,7 @@ import { updateBackgroundPlaybackState, initBackgroundPlayback } from "@/app/lib
 import { playbackController } from "@/lib/playback/PlaybackController";
 import { usePlaybackState } from "@/lib/playback/usePlaybackState";
 import { PlaybackTrack } from "@/lib/playback/types";
+import { AudioTrackDisplay } from "./AudioTrackDisplay";
 
 interface PlayerBarProps {
   tracks: Track[];
@@ -146,6 +147,7 @@ function HardwareButton({
   size = "md",
   color,
   title,
+  disabled = false,
 }: {
   children: React.ReactNode;
   onClick: () => void;
@@ -154,6 +156,7 @@ function HardwareButton({
   size?: "sm" | "md" | "lg";
   color?: string;
   title?: string;
+  disabled?: boolean;
 }) {
   const sizeClasses =
     size === "lg"
@@ -164,23 +167,30 @@ function HardwareButton({
 
   return (
     <motion.button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       aria-label={label}
       title={title}
-      whileTap={{ scale: 0.88, y: 1.5 }}
+      disabled={disabled}
+      whileTap={{ scale: disabled ? 1 : 0.88, y: disabled ? 0 : 1.5 }}
       transition={{ type: "spring", stiffness: 420, damping: 18 }}
-      className={`flex-shrink-0 flex items-center justify-center cursor-pointer border-0 outline-none relative ${sizeClasses}`}
+      className={`flex-shrink-0 flex items-center justify-center cursor-pointer border-0 outline-none relative ${sizeClasses} ${
+        disabled ? "opacity-50 cursor-not-allowed" : ""
+      }`}
       style={{
-        background: active && color
+        background: active && color && !disabled
           ? `linear-gradient(175deg, ${color}E0 0%, ${color}A0 100%)`
+          : disabled
+          ? "linear-gradient(175deg, #3A3028 0%, #2A2018 100%)"
           : "linear-gradient(175deg, #5A5040 0%, #3A3028 55%, #28201A 100%)",
-        boxShadow: active
+        boxShadow: disabled
+          ? "0 2px 0 rgba(255,255,255,0.05) inset, 0 -2px 0 rgba(0,0,0,0.35) inset, 0 2px 4px rgba(0,0,0,0.45)"
+          : active
           ? `0 1px 0 rgba(255,255,255,0.07) inset, 0 -1px 0 rgba(0,0,0,0.55) inset, 0 2px 6px rgba(0,0,0,0.55)`
           : `0 2px 0 rgba(255,255,255,0.10) inset, 0 -2px 0 rgba(0,0,0,0.55) inset, 0 3px 8px rgba(0,0,0,0.65)`,
       }}
     >
       {/* Active LED */}
-      {active && (
+      {active && !disabled && (
         <motion.span
           className="absolute"
           style={{
@@ -197,7 +207,7 @@ function HardwareButton({
         />
       )}
       {/* Pulse ring on play */}
-      {active && size === "lg" && (
+      {active && !disabled && size === "lg" && (
         <motion.span
           className="absolute inset-0 pointer-events-none rounded-lg sm:rounded-xl"
           style={{ border: `1.5px solid ${color ?? "#D4882A"}` }}
@@ -227,7 +237,9 @@ export default function PlayerBar({
 }: PlayerBarProps) {
   const [showVideo, setShowVideo] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false); // Debounce flag
   const playbackState = usePlaybackState();
+  const playbackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     initBackgroundPlayback();
@@ -280,6 +292,38 @@ export default function PlayerBar({
       playbackController.setQueue(mappedQueue, currentIndex);
     }
   }, [currentIndex, mappedQueue]);
+
+  // Debounced play/pause handler to prevent rapid clicks
+  const handlePlayPause = useCallback(() => {
+    if (isButtonDisabled) return;
+    
+    setIsButtonDisabled(true);
+    playClickSound(true);
+
+    if (isPlaying) {
+      playbackController.pause();
+      onPause?.();
+    } else {
+      if (activeTrack) {
+        playbackController.playTrack(activeTrack, mappedQueue);
+      } else {
+        playbackController.play();
+      }
+      onPlay?.();
+    }
+
+    if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+    playbackTimeoutRef.current = setTimeout(() => {
+      setIsButtonDisabled(false);
+    }, 300);
+  }, [isPlaying, activeTrack, mappedQueue, onPlay, onPause, isButtonDisabled]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (playbackTimeoutRef.current) clearTimeout(playbackTimeoutRef.current);
+    };
+  }, []);
 
   // Keyboard shortcut listener (Spacebar = toggle play/pause, Arrow keys = skip/seek)
   useEffect(() => {
@@ -434,23 +478,11 @@ export default function PlayerBar({
           <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
             <HardwareButton
               size="lg"
-              onClick={() => {
-                playClickSound(true);
-                if (isPlaying) {
-                  playbackController.pause();
-                  onPause?.();
-                } else {
-                  if (activeTrack) {
-                    playbackController.playTrack(activeTrack, mappedQueue);
-                  } else {
-                    playbackController.play();
-                  }
-                  onPlay?.();
-                }
-              }}
+              onClick={handlePlayPause}
               aria-label={isPlaying ? "Pause" : "Play"}
               active={isPlaying}
               color={accentColor}
+              disabled={isButtonDisabled}
             >
               <AnimatePresence mode="wait">
                 <motion.div
@@ -664,6 +696,21 @@ export default function PlayerBar({
                 </p>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── AUDIO FRAME FOR YOUTUBE TRACKS ──────────────────────── */}
+        <AnimatePresence>
+          {isPlaying && activeTrack.provider === "youtube" && (
+            <AudioTrackDisplay
+              mediaAssetId={activeTrack.providerTrackId}
+              title={activeTrack.title}
+              artist={activeTrack.artist || "Unknown"}
+              thumbnailUrl={activeTrack.artworkUrl}
+              isPlaying={isPlaying}
+              allMediaAssetIds={mappedQueue.map(t => t.providerTrackId)}
+              currentTrackIndex={currentIndex}
+            />
           )}
         </AnimatePresence>
       </div>

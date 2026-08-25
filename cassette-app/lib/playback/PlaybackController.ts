@@ -6,6 +6,7 @@ import {
 } from "./types";
 import { VoiceEngine } from "./VoiceEngine";
 import { YouTubeEngine } from "./YouTubeEngine";
+import { AudioAssetEngine } from "./AudioAssetEngine";
 import { updateMediaSession } from "./MediaSessionManager";
 
 const initialPlaybackState: PlaybackState = {
@@ -63,10 +64,12 @@ export class PlaybackController {
       this.engine = null;
     }
 
-    // 2. Instantiate YouTubeEngine or VoiceEngine based on track.provider
+    // 2. Instantiate YouTubeEngine, VoiceEngine, or AudioAssetEngine based on track.provider
     if (!this.engine) {
       if (track.provider === "voice") {
         this.engine = new VoiceEngine();
+      } else if (track.provider === "media_asset") {
+        this.engine = new AudioAssetEngine();
       } else {
         this.engine = new YouTubeEngine(this.containerId);
       }

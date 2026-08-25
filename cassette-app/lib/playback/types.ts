@@ -1,4 +1,4 @@
-export type TrackProvider = "youtube" | "voice";
+export type TrackProvider = "youtube" | "voice" | "media_asset";
 
 export interface PlaybackTrack {
   id: string;                // TapeTrack.id
