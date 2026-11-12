@@ -12,10 +12,25 @@ import { MediaAssetStatus } from "@/app/lib/types";
 export async function getPendingJobs(limit: number) {
   const now = new Date();
 
+  // Restore jobs abandoned during a process restart so they can be retried.
+  await prisma.mediaAsset.updateMany({
+    where: {
+      status: { in: ["VALIDATING", "DOWNLOADING", "CONVERTING", "UPLOADING"] },
+      updatedAt: { lt: new Date(now.getTime() - 15 * 60 * 1000) },
+    },
+    data: {
+      status: "FAILED",
+      error: "Processing worker stopped before completing this track. Retry processing.",
+      errorDetails: "Recovered stale in-progress media job",
+      nextAttemptAt: now,
+      attemptCount: { increment: 1 },
+    },
+  });
+
   const jobs = await prisma.mediaAsset.findMany({
     where: {
       OR: [
-        { status: "PENDING" },
+        { status: "PENDING", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
         {
           status: "FAILED",
           nextAttemptAt: { lte: now },
@@ -50,6 +65,7 @@ export async function lockJob(
       where: {
         id: jobId,
         status: { in: ["PENDING", "FAILED"] },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
       },
       data: {
         status: "VALIDATING",

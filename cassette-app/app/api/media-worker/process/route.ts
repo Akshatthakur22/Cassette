@@ -7,13 +7,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { mkdirSync, existsSync, rmSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import { prisma } from "@/app/lib/prisma";
 
 // Import worker modules
 import {
   validateYouTubeVideo,
   downloadYouTubeAudio,
-  getAudioDuration,
 } from "@/app/services/media-worker/youtube";
 
 import {
@@ -25,12 +25,16 @@ import {
 
 import { createR2ClientFromEnv } from "@/app/services/media-worker/storage";
 
+export const runtime = "nodejs";
+// This work invokes yt-dlp and FFmpeg and must have enough time to finish.
+export const maxDuration = 300;
+
 // Configuration
 const CONFIG = {
   maxConcurrent: 1, // Process sequentially in API
   tempDir:
     process.env.TEMP_DIR ||
-    join(process.cwd(), ".temp/cassette-media-processing"),
+    join(tmpdir(), "cassette-media-processing"),
   targetBitrate: parseInt(process.env.TARGET_BITRATE_KBPS || "128", 10),
   logLevel: process.env.LOG_LEVEL || "info",
 };
@@ -48,8 +52,8 @@ function verifyWorkerSecret(request: NextRequest): boolean {
   const expectedSecret = process.env.MEDIA_WORKER_SECRET;
 
   if (!expectedSecret) {
-    log("warn", "MEDIA_WORKER_SECRET not configured");
-    return true; // Allow if not configured
+    log("error", "MEDIA_WORKER_SECRET not configured; refusing worker request");
+    return false;
   }
 
   return secret === expectedSecret;
@@ -58,34 +62,34 @@ function verifyWorkerSecret(request: NextRequest): boolean {
 /**
  * Get pending jobs ready for processing
  */
-async function getPendingJobs(limit: number) {
+async function getPendingJobs(requestedAssetId?: string) {
   const now = new Date();
 
-  // Reset orphaned jobs stuck in VALIDATING for >2 minutes
+  // Recover jobs left in any in-progress state after a function/worker restart.
+  // This prevents DOWNLOADING/CONVERTING/UPLOADING records from returning 202 forever.
   await prisma.mediaAsset.updateMany({
     where: {
-      status: "VALIDATING",
-      lastAttemptAt: {
-        lt: new Date(now.getTime() - 2 * 60 * 1000), // Older than 2 minutes
-      },
+      status: { in: ["VALIDATING", "DOWNLOADING", "CONVERTING", "UPLOADING"] },
+      updatedAt: { lt: new Date(now.getTime() - 15 * 60 * 1000) },
     },
     data: {
-      status: "PENDING",
-      error: "Worker timeout - retrying",
+      status: "FAILED",
+      error: "Processing worker stopped before completing this track. Retry processing.",
+      errorDetails: "Recovered stale in-progress media job",
+      nextAttemptAt: now,
+      attemptCount: { increment: 1 },
     },
   });
 
   const jobs = await prisma.mediaAsset.findMany({
     where: {
+      ...(requestedAssetId ? { id: requestedAssetId } : {}),
       OR: [
-        { status: "PENDING" },
-        {
-          status: "FAILED",
-          nextAttemptAt: { lte: now },
-        },
+        { status: "PENDING", OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+        { status: "FAILED", nextAttemptAt: { lte: now } },
       ],
     },
-    take: limit,
+    take: 1,
     orderBy: { createdAt: "asc" },
   });
 
@@ -175,10 +179,12 @@ async function failJob(
  */
 async function lockJob(jobId: string): Promise<boolean> {
   try {
+    const now = new Date();
     const result = await prisma.mediaAsset.updateMany({
       where: {
         id: jobId,
         status: { in: ["PENDING", "FAILED"] },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
       },
       data: {
         status: "VALIDATING",
@@ -288,17 +294,22 @@ async function processJob(jobId: string, videoId: string): Promise<void> {
     await updateJobStatus(jobId, "UPLOADING");
 
     const r2 = createR2ClientFromEnv();
-    let storageKey = `media-assets/${jobId}.mp3`;
+    const storageKey = `media-assets/${jobId}.mp3`;
 
     if (r2) {
       try {
-        // Add timeout wrapper for R2 upload
+        // Keep the upload bounded so processing can finish within the function limit.
         const uploadPromise = r2.uploadMP3(mp3Path, jobId);
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("R2 upload timeout (5 minutes)")), 5 * 60 * 1000)
-        );
-
-        const uploadResult = await Promise.race([uploadPromise, timeoutPromise]) as any;
+        let uploadTimer: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          uploadTimer = setTimeout(() => reject(new Error("R2 upload timeout (60 seconds)")), 60_000);
+        });
+        let uploadResult: Awaited<ReturnType<typeof r2.uploadMP3>>;
+        try {
+          uploadResult = await Promise.race([uploadPromise, timeoutPromise]);
+        } finally {
+          if (uploadTimer) clearTimeout(uploadTimer);
+        }
 
         if (!uploadResult.success) {
           log("warn", "R2 upload failed", { error: uploadResult.error });
@@ -306,13 +317,14 @@ async function processJob(jobId: string, videoId: string): Promise<void> {
           cleanupJobDir(jobDir);
           return;
         }
-        await r2.close();
       } catch (uploadError) {
         const errorMsg = String(uploadError);
         log("error", "R2 operation failed", { error: errorMsg });
         await failJob(jobId, `R2 error: ${errorMsg}`, errorMsg);
         cleanupJobDir(jobDir);
         return;
+      } finally {
+        await r2.close();
       }
     } else {
       log("warn", "R2 not configured, skipping upload");
@@ -343,48 +355,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get optional job limit from query
-    const limit = request.nextUrl.searchParams.get("limit");
-    const jobLimit = limit ? parseInt(limit, 10) : 10;
+    let requestedAssetId: string | undefined;
+    try {
+      const body = await request.json();
+      if (typeof body.mediaAssetId === "string") requestedAssetId = body.mediaAssetId;
+    } catch {
+      // Empty body is allowed for scheduled queue draining.
+    }
 
-    log("info", "✅ WORKER TRIGGERED - Processing jobs", { jobLimit, timestamp: new Date().toISOString() });
+    log("info", "Worker triggered", { requestedAssetId: requestedAssetId || "oldest pending", timestamp: new Date().toISOString() });
 
     // Ensure temp directory exists
     mkdirSync(CONFIG.tempDir, { recursive: true });
 
     // Get pending jobs
-    const jobs = await getPendingJobs(jobLimit);
+    const jobs = await getPendingJobs(requestedAssetId);
 
     if (jobs.length > 0) {
       log("info", "Found pending jobs", { count: jobs.length });
 
-      // Process jobs in parallel (up to 3 concurrent)
-      // This allows multiple downloads to happen simultaneously
-      const concurrency = 3;
-      const chunks = [];
-      for (let i = 0; i < jobs.length; i += concurrency) {
-        chunks.push(jobs.slice(i, i + concurrency));
-      }
-
-      let processedCount = 0;
-      for (const chunk of chunks) {
-        log("info", "Processing chunk", { 
-          chunkSize: chunk.length, 
-          totalProcessed: processedCount 
-        });
-
-        // Process up to 3 jobs concurrently
-        await Promise.allSettled(
-          chunk.map(job => {
-            const videoId = job.providerTrackId;
-            return processJob(job.id, videoId);
-          })
-        );
-
-        processedCount += chunk.length;
-      }
-
-      log("info", "All jobs processed", { count: processedCount });
+      const job = jobs[0];
+      log("info", "Processing media asset", { mediaAssetId: job.id });
+      await processJob(job.id, job.providerTrackId);
     } else {
       log("info", "No pending jobs");
     }
@@ -394,6 +386,7 @@ export async function POST(request: NextRequest) {
         success: true,
         message: "Media worker processing completed",
         jobsProcessed: jobs.length,
+        mediaAssetId: jobs[0]?.id || requestedAssetId || null,
       },
       { status: 200 }
     );

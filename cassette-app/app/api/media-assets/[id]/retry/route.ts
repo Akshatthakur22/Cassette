@@ -6,10 +6,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import {
-  shouldRetry,
-  calculateBackoffDelay,
-} from "@/app/lib/media-asset";
+import { scheduleMediaAssetProcessing } from "@/app/lib/media-asset";
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +40,7 @@ export async function POST(
 
     const maxRetries = parseInt(process.env.MAX_RETRIES || "3", 10);
 
-    if (!shouldRetry(asset.status as any, asset.attemptCount, maxRetries)) {
+    if (asset.status !== "FAILED" || asset.attemptCount >= maxRetries) {
       return NextResponse.json(
         {
           error: `Cannot retry: status is ${asset.status}. Max retries (${maxRetries}) may have been exceeded.`,
@@ -52,22 +49,15 @@ export async function POST(
       );
     }
 
-    // Calculate next attempt time with exponential backoff
-    const baseDelayMs =
-      (parseInt(process.env.RETRY_BACKOFF_BASE_MINUTES || "1", 10)) * 60 * 1000;
-    const nextAttemptMs = calculateBackoffDelay(
-      asset.attemptCount + 1,
-      baseDelayMs
-    );
-    const nextAttemptAt = new Date(Date.now() + nextAttemptMs);
-
-    // Update status to PENDING and schedule retry
+    // An explicit user retry should start now, not wait for the automatic
+    // exponential backoff used for worker failures.
     const updated = await prisma.mediaAsset.update({
       where: { id: mediaAssetId },
       data: {
         status: "PENDING",
-        nextAttemptAt,
-        attemptCount: asset.attemptCount + 1,
+        nextAttemptAt: null,
+        error: null,
+        errorDetails: null,
       },
       select: {
         id: true,
@@ -77,11 +67,12 @@ export async function POST(
       },
     });
 
-    console.log("[media-assets retry] Scheduled retry:", {
+    console.log("[media-assets retry] Starting retry:", {
       mediaAssetId,
-      nextAttemptAt,
       attemptCount: updated.attemptCount,
     });
+
+    scheduleMediaAssetProcessing(mediaAssetId);
 
     return NextResponse.json({
       ok: true,
@@ -90,6 +81,7 @@ export async function POST(
       attemptCount: updated.attemptCount,
       nextAttemptAt: updated.nextAttemptAt,
     });
+
   } catch (error) {
     console.error("[media-assets retry] Error:", error);
     return NextResponse.json(

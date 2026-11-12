@@ -33,7 +33,8 @@ import { prisma } from "@/app/lib/prisma";
 import {
   createMediaAsset,
   findExistingMediaAsset,
-  triggerMediaAssetProcessing,
+  requeueMediaAsset,
+  scheduleMediaAssetProcessing,
 } from "@/app/lib/media-asset";
 
 export async function POST(req: NextRequest) {
@@ -56,12 +57,14 @@ export async function POST(req: NextRequest) {
     const existing = await findExistingMediaAsset(videoId);
     
     if (existing) {
+      await requeueMediaAsset(existing.id);
+      if (existing.status !== "READY") scheduleMediaAssetProcessing(existing.id);
       // Song already in database - return existing record
       return NextResponse.json(
         {
           success: true,
           mediaAssetId: existing.id,
-          status: existing.status,
+          status: existing.status === "FAILED" || existing.status === "EXPIRED" ? "PENDING" : existing.status,
           message: `Song already in database (status: ${existing.status})`,
           fileSize: existing.fileSize,
         },
@@ -87,9 +90,7 @@ export async function POST(req: NextRequest) {
 
     // ──── TRIGGER IMMEDIATE PROCESSING ──────────────────────────────────
     // Try to trigger worker immediately, but don't fail if it doesn't work
-    triggerMediaAssetProcessing(mediaAsset.id).catch((err) => {
-      console.warn("[bulk-upload] Worker trigger failed, will retry later:", err);
-    });
+    scheduleMediaAssetProcessing(mediaAsset.id);
 
     // ──── RETURN SUCCESS ────────────────────────────────────────────────
     return NextResponse.json(

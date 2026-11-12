@@ -3,7 +3,7 @@
  * Uses yt-dlp to validate and download audio
  */
 
-import { execSync, spawn } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 
@@ -29,8 +29,9 @@ export async function validateYouTubeVideo(
 ): Promise<ValidationResult> {
   return new Promise((resolve) => {
     try {
-      const result = execSync(
-        `yt-dlp --no-warnings -j "https://www.youtube.com/watch?v=${videoId}"`,
+      const result = execFileSync(
+        process.env.YTDLP_PATH || "yt-dlp",
+        ["--no-warnings", "-j", `https://www.youtube.com/watch?v=${videoId}`],
         { timeout: 30000, encoding: "utf8" }
       );
 
@@ -112,7 +113,7 @@ export async function downloadYouTubeAudio(
     }, timeoutMs);
 
     try {
-      const proc = spawn("yt-dlp", [
+      const proc = spawn(process.env.YTDLP_PATH || "yt-dlp", [
         "--no-warnings",
         "-f",
         "bestaudio[ext=m4a]/bestaudio", // Prefer m4a to avoid re-encoding
@@ -288,8 +289,9 @@ export async function downloadYouTubeAudio(
  */
 export function getAudioDuration(filePath: string): number {
   try {
-    const result = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1:noquote=1 "${filePath}"`,
+    const result = execFileSync(
+      process.env.FFPROBE_PATH || "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1:noquote=1", filePath],
       { encoding: "utf8" }
     );
     return Math.round(parseFloat(result)) || 0;

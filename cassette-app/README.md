@@ -187,7 +187,20 @@ DATABASE_URL="postgresql://user:password@localhost:5432/cassette_db?schema=publi
 DATABASE_URL_UNPOOLED="postgresql://user:password@localhost:5432/cassette_db?schema=public"
 NEXT_PUBLIC_DOMAIN="http://localhost:3000"
 YOUTUBE_API_KEY="your_youtube_api_key_here"
+MEDIA_WORKER_SECRET="a-long-random-secret"
+WORKER_TRIGGER_URL="http://localhost:3000"
+R2_ACCOUNT_ID="your_account_id"
+R2_ACCESS_KEY_ID="your_key_id"
+R2_SECRET_ACCESS_KEY="your_secret"
+R2_BUCKET_NAME="cassette-media-assets"
+R2_PUBLIC_BASE_URL="https://media.example.com"
 ```
+
+YouTube audio processing requires `yt-dlp`, `ffmpeg`, and `ffprobe` executables in the
+Node.js runtime. The processing route runs one asset at a time and declares a
+300-second maximum duration; the hosting plan must allow that duration. The
+R2 credentials and worker secret must be configured in the deployment
+environment as well as locally. A missing worker secret now blocks processing.
 
 ### 4. Database Initialization
 ```bash

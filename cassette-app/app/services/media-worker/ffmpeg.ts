@@ -33,7 +33,7 @@ export async function convertToMP3(
     }, 10 * 60 * 1000);
 
     try {
-      const proc = spawn("ffmpeg", [
+      const proc = spawn(process.env.FFMPEG_PATH || "ffmpeg", [
         "-i",
         inputPath,
         // Aggressive compression for speed & size

@@ -1,7 +1,23 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Plus, Music, Play } from 'lucide-react';
+
+type IconName = 'search' | 'filter' | 'plus' | 'music' | 'play';
+
+function Icon({ name, className = '' }: { name: IconName; className?: string }) {
+  const paths: Record<IconName, string> = {
+    search: 'M21 21l-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z',
+    filter: 'M4 5h16M7 12h10m-7 7h4',
+    plus: 'M12 5v14M5 12h14',
+    music: 'M9 18V5l12-2v13M9 18a3 3 0 1 1-3-3c1.7 0 3 1.3 3 3Zm12-2a3 3 0 1 1-3-3c1.7 0 3 1.3 3 3Z',
+    play: 'm8 5 12 7-12 7V5Z',
+  };
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={paths[name]} />
+    </svg>
+  );
+}
 
 interface Song {
   id: string;
@@ -26,9 +42,6 @@ export function SongSearchLibrary({
   mode = 'multiple',
 }: SongSearchLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSource, setSelectedSource] = useState<'all' | 'youtube' | 'library'>(
-    'all'
-  );
   const [songs, setSongs] = useState<Song[]>([]);
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -50,35 +63,21 @@ export function SongSearchLibrary({
 
     setLoading(true);
     try {
-      // Search library first
-      if (activeTab === 'all' || activeTab === 'library') {
-        const libraryRes = await fetch(
-          `/api/search?q=${encodeURIComponent(query)}&source=library&limit=20`
+      const sources: Array<'library' | 'youtube'> = activeTab === 'all'
+        ? ['library', 'youtube']
+        : [activeTab];
+      const results = await Promise.all(sources.map(async (source) => {
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(query)}&source=${source}&limit=20`
         );
-        const libraryData = await libraryRes.json();
-
-        const librarySongs: Song[] = (libraryData.songs || []).map((s: any) => ({
-          ...s,
-          source: 'library' as const,
-        }));
-
-        // Search YouTube if needed
-        if (activeTab === 'all' || activeTab === 'youtube') {
-          const youtubeRes = await fetch(
-            `/api/search?q=${encodeURIComponent(query)}&source=youtube&limit=20`
-          );
-          const youtubeData = await youtubeRes.json();
-
-          const youtubeSongs: Song[] = (youtubeData.songs || []).map((s: any) => ({
-            ...s,
-            source: 'youtube' as const,
-          }));
-
-          setSongs([...librarySongs, ...youtubeSongs]);
-        } else {
-          setSongs(librarySongs);
-        }
-      }
+        if (!response.ok) throw new Error(`Search failed (${response.status})`);
+        const data = await response.json() as { songs?: unknown[] };
+        return (data.songs ?? []).map((song) => ({
+          ...(song as Omit<Song, 'source'>),
+          source,
+        } satisfies Song));
+      }));
+      setSongs(results.flat());
     } catch (error) {
       console.error('Search error:', error);
     } finally {
@@ -129,13 +128,13 @@ export function SongSearchLibrary({
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          <Music className="w-6 h-6" />
+          <Icon name="music" className="w-6 h-6" />
           Song Library & YouTube Search
         </h2>
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <Icon name="search" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
             placeholder="Search songs by title, artist, or YouTube..."
@@ -182,7 +181,7 @@ export function SongSearchLibrary({
             onClick={() => setShowFilters(!showFilters)}
             className="px-3 py-2 border border-gray-300 rounded text-sm hover:bg-gray-100 flex items-center gap-2"
           >
-            <Filter className="w-4 h-4" />
+            <Icon name="filter" className="w-4 h-4" />
             Filter
           </button>
         </div>
@@ -239,7 +238,7 @@ export function SongSearchLibrary({
           </div>
         ) : songs.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
-            <Music className="w-12 h-12 mx-auto mb-2 opacity-30" />
+            <Icon name="music" className="w-12 h-12 mx-auto mb-2 opacity-30" />
             <p>{searchQuery ? 'No songs found' : 'Start searching to find songs'}</p>
           </div>
         ) : (
@@ -293,7 +292,7 @@ export function SongSearchLibrary({
                   {/* Play Button */}
                   {song.source === 'library' && (
                     <button className="p-2 hover:bg-purple-100 rounded-full transition-colors">
-                      <Play className="w-4 h-4 text-purple-600" />
+                      <Icon name="play" className="w-4 h-4 text-purple-600" />
                     </button>
                   )}
                 </div>
@@ -314,7 +313,7 @@ export function SongSearchLibrary({
           disabled={selectedSongs.size === 0}
           className="flex items-center gap-2 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
         >
-          <Plus className="w-5 h-5" />
+          <Icon name="plus" className="w-5 h-5" />
           Add to Cassette ({selectedSongs.size})
         </button>
       </div>

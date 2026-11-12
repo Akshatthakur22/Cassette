@@ -71,6 +71,7 @@ export interface TrackRow {
   thumbnailUrl: string | null;
   provider: string;
   providerTrackId: string;
+  mediaAssetId?: string | null;
   personalNote: string | null;
   durationSec: number | null;
 }

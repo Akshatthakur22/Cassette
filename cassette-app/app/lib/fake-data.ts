@@ -6,7 +6,7 @@ export type Track = {
   artist: string;
   thumbnailUrl: string;
   providerTrackId: string; // YouTube videoId or voice trackId
-  provider?: "youtube" | "voice"; // Track provider type
+  provider?: "youtube" | "voice" | "media_asset"; // Track provider type
   personalNote?: string;
   durationSec: number;
 };

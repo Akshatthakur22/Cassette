@@ -124,8 +124,7 @@ export class AudioAssetEngine implements PlaybackEngine {
 
   /**
    * Load a media asset track
-   * Fetches signed URL from API endpoint, then loads into audio element
-   * Handles pending assets by retrying automatically
+   * Waits for processing to finish, then loads the stream endpoint.
    */
   async load(track: PlaybackTrack, retries: number = 0): Promise<void> {
     if (!this.audio) return;
@@ -134,34 +133,34 @@ export class AudioAssetEngine implements PlaybackEngine {
       this.currentTrack = track;
       this.mediaAssetId = track.providerTrackId; // For media_asset, this is the mediaAssetId
 
-      // Fetch audio from our stream endpoint (has CORS headers)
-      // This proxies R2 with proper CORS headers for browser playback
-      const streamUrl = `/api/media-assets/${this.mediaAssetId}/stream`;
-      
-      const checkResponse = await fetch(streamUrl, { method: 'HEAD' });
-      
-      if (checkResponse.status === 202) {
-        // Asset is still processing
-        const retryAfter = parseInt(checkResponse.headers.get('Retry-After') || '3', 10) * 1000;
-        console.log(`[AudioAssetEngine] Asset processing, retrying in ${retryAfter}ms`, { mediaAssetId: this.mediaAssetId });
-        
+      const statusResponse = await fetch(`/api/media-assets/${this.mediaAssetId}/status`, {
+        cache: "no-store",
+      });
+      if (!statusResponse.ok) {
+        throw new Error(`Status check failed: ${statusResponse.status}`);
+      }
+      const asset = await statusResponse.json();
+
+      if (asset.status !== "READY") {
+        if (asset.status === "FAILED" || asset.status === "EXPIRED") {
+          throw new Error(asset.error || `Media processing ${asset.status.toLowerCase()}`);
+        }
         this.emitState({
           isPlaying: false,
           isBuffering: true,
         });
 
-        // Retry after delay (max 10 attempts = ~30 seconds)
-        if (retries < 10) {
-          await new Promise(resolve => setTimeout(resolve, retryAfter));
+        // Downloads can take longer than the old 30 second window. Poll the
+        // job record (small response) instead of repeatedly probing the audio stream.
+        if (retries < 40) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
           return this.load(track, retries + 1);
         } else {
-          throw new Error('Media asset processing timeout');
+          throw new Error(`Media asset is still ${asset.status.toLowerCase()} after 2 minutes`);
         }
-      } else if (!checkResponse.ok) {
-        throw new Error(`Stream check failed: ${checkResponse.status} ${checkResponse.statusText}`);
       }
       
-      // Set audio source to stream endpoint
+      const streamUrl = `/api/media-assets/${this.mediaAssetId}/stream`;
       this.audio.src = streamUrl;
       this.audio.load();
 

@@ -203,7 +203,6 @@ export async function addTrack(draftId: string, track: TrackInput) {
   // ──── VALIDATION 1: Track duration constraints ────────────────────────────
   const {
     validateTrackDuration,
-    validateTapeCapacity,
     canFitOnSide,
   } = await import("@/app/lib/audio-validation");
 
@@ -234,7 +233,7 @@ export async function addTrack(draftId: string, track: TrackInput) {
   }
 
   let durationSec = track.durationSec;
-  let trackTitle = track.title;
+  const trackTitle = track.title;
   let trackArtist = track.artist ?? null;
   let trackThumbnail = track.thumbnailUrl ?? null;
   let mediaAssetId: string | null = null;
@@ -267,13 +266,18 @@ export async function addTrack(draftId: string, track: TrackInput) {
       const {
         findExistingMediaAsset,
         createMediaAsset,
-        triggerMediaAssetProcessing,
+      scheduleMediaAssetProcessing,
+      requeueMediaAsset,
       } = await import("@/app/lib/media-asset");
 
       // Check if we already have a processing job for this video
       const existing = await findExistingMediaAsset(track.providerTrackId);
       if (existing) {
         mediaAssetId = existing.id;
+        await requeueMediaAsset(existing.id);
+        if (existing.status !== "READY") {
+          scheduleMediaAssetProcessing(existing.id);
+        }
       } else {
         // Create new MediaAsset job
         const asset = await createMediaAsset(
@@ -291,14 +295,24 @@ export async function addTrack(draftId: string, track: TrackInput) {
         });
 
         // Immediately trigger processing (don't wait for polling cycle)
-        triggerMediaAssetProcessing(asset.id).catch(() => {
-          // If trigger fails, worker will pick it up in next cycle
-          console.debug("[addTrack] Worker trigger skipped, will poll later");
-        });
+        scheduleMediaAssetProcessing(asset.id);
       }
       // ──────────────────────────────────────────────────────────────────────
     } catch (e) {
       console.warn("[addTrack] Validation warning:", e);
+      // Two creators can select the same song at nearly the same time. The
+      // unique provider/video constraint means the second create should reuse
+      // the asset that won the race instead of falling back to raw YouTube.
+      const { findExistingMediaAsset, requeueMediaAsset, scheduleMediaAssetProcessing } =
+        await import("@/app/lib/media-asset");
+      const racedAsset = await findExistingMediaAsset(track.providerTrackId);
+      if (racedAsset) {
+        mediaAssetId = racedAsset.id;
+        await requeueMediaAsset(racedAsset.id);
+        if (racedAsset.status !== "READY") scheduleMediaAssetProcessing(racedAsset.id);
+      } else {
+        return { error: "We couldn't queue this song for processing. Please try adding it again." };
+      }
     }
   }
 
@@ -371,7 +385,8 @@ export async function addTracksFromPlaylist(
   const {
     findExistingMediaAsset,
     createMediaAsset,
-    triggerMediaAssetProcessing,
+    scheduleMediaAssetProcessing,
+    requeueMediaAsset,
   } = await import("@/app/lib/media-asset");
 
   for (const item of items) {
@@ -399,6 +414,10 @@ export async function addTracksFromPlaylist(
       const existing = await findExistingMediaAsset(item.videoId);
       if (existing) {
         mediaAssetId = existing.id;
+        await requeueMediaAsset(existing.id);
+        if (existing.status !== "READY") {
+          scheduleMediaAssetProcessing(existing.id);
+        }
       } else {
         const asset = await createMediaAsset(
           item.videoId,
@@ -409,12 +428,20 @@ export async function addTracksFromPlaylist(
         mediaAssetId = asset.id;
 
         // Immediately trigger processing
-        triggerMediaAssetProcessing(asset.id).catch(() => {
-          console.debug(`[addTracksFromPlaylist] Worker trigger skipped for ${asset.id}`);
-        });
+        scheduleMediaAssetProcessing(asset.id);
       }
     } catch (err) {
       console.warn(`[addTracksFromPlaylist] MediaAsset creation failed for ${item.videoId}:`, err);
+      const racedAsset = await findExistingMediaAsset(item.videoId);
+      if (racedAsset) {
+        mediaAssetId = racedAsset.id;
+        await requeueMediaAsset(racedAsset.id);
+        if (racedAsset.status !== "READY") scheduleMediaAssetProcessing(racedAsset.id);
+      } else {
+        // Do not create a raw YouTube track that the shared player cannot
+        // serve through the processed-audio pipeline.
+        continue;
+      }
     }
 
     const created = await prisma.tapeTrack.create({

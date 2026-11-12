@@ -3,6 +3,9 @@ import { getTapeForEditor } from "@/app/actions/tape";
 import TapeEditorClient from "./TapeEditorClient";
 import type { Metadata } from "next";
 
+// Server Actions on the editor schedule media processing after responding.
+export const maxDuration = 300;
+
 export const metadata: Metadata = {
   title: "CASSETTE — Edit your tape",
   robots: { index: false, follow: false },

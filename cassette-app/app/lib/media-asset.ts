@@ -1,3 +1,5 @@
+import { after } from "next/server";
+
 /**
  * Trigger immediate processing of a newly created MediaAsset
  * Calls the media-worker API endpoint to start processing right away
@@ -5,20 +7,22 @@
  */
 export async function triggerMediaAssetProcessing(mediaAssetId: string) {
   try {
-    // CRITICAL: Always use production domain for worker trigger
-    // This ensures new songs can be processed even when deployed to preview URLs
-    // Production URL must be publicly accessible without auth
-    let baseUrl = "https://cassette-share.vercel.app";
-    
-    // Override with explicit env var if set (for self-hosted deployments)
-    if (process.env.WORKER_TRIGGER_URL) {
-      baseUrl = process.env.WORKER_TRIGGER_URL;
-    } else if (process.env.NEXT_PUBLIC_DOMAIN) {
-      baseUrl = process.env.NEXT_PUBLIC_DOMAIN;
+    const configuredBaseUrl = process.env.WORKER_TRIGGER_URL || process.env.NEXT_PUBLIC_DOMAIN;
+    const baseUrl = (configuredBaseUrl || (process.env.NODE_ENV === "production"
+      ? ""
+      : "http://localhost:3000")).replace(/\/+$/, "");
+    if (!baseUrl) {
+      console.error("[WORKER TRIGGER] Set WORKER_TRIGGER_URL or NEXT_PUBLIC_DOMAIN in production.");
+      return false;
+    }
+
+    const secret = process.env.MEDIA_WORKER_SECRET;
+    if (!secret) {
+      console.error("[WORKER TRIGGER] MEDIA_WORKER_SECRET is not configured.");
+      return false;
     }
 
     const url = `${baseUrl}/api/media-worker/process`;
-    const secret = process.env.MEDIA_WORKER_SECRET || "";
     
     console.log(`[WORKER TRIGGER] 🚀 Starting download for MediaAsset: ${mediaAssetId}`);
     console.log(`[WORKER TRIGGER] Calling worker endpoint: ${url}`);
@@ -29,10 +33,7 @@ export async function triggerMediaAssetProcessing(mediaAssetId: string) {
         "Content-Type": "application/json",
         "x-worker-secret": secret,
       },
-      body: JSON.stringify({
-        trigger: "manual",
-        mediaAssetId, // Optional: prioritize this specific asset
-      }),
+      body: JSON.stringify({ trigger: "manual", mediaAssetId }),
     });
 
     const responseText = await response.text();
@@ -54,6 +55,16 @@ export async function triggerMediaAssetProcessing(mediaAssetId: string) {
   }
 }
 
+/** Run the worker trigger after returning the current request's response. */
+export function scheduleMediaAssetProcessing(mediaAssetId: string) {
+  after(async () => {
+    const started = await triggerMediaAssetProcessing(mediaAssetId);
+    if (!started) {
+      console.error(`[WORKER TRIGGER] Could not start processing for ${mediaAssetId}`);
+    }
+  });
+}
+
 /**
  * Media Asset utilities and helpers
  * Handles MediaAsset creation, status tracking, and error handling
@@ -72,17 +83,26 @@ export async function createMediaAsset(
   artist: string | null,
   durationSec: number
 ) {
-  return await prisma.mediaAsset.create({
-    data: {
-      provider: "youtube",
-      providerTrackId: videoId,
-      title,
-      artist,
-      durationSec,
-      status: "PENDING",
-      attemptCount: 0,
-    },
-  });
+  try {
+    return await prisma.mediaAsset.create({
+      data: {
+        provider: "youtube",
+        providerTrackId: videoId,
+        title,
+        artist,
+        durationSec,
+        status: "PENDING",
+        attemptCount: 0,
+      },
+    });
+  } catch (error) {
+    // Concurrent selections can race the unique provider/video key.
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      const existing = await findExistingMediaAsset(videoId);
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -137,17 +157,29 @@ export async function getMediaAssetStatus(id: string) {
 
 /**
  * Check if a MediaAsset exists for a given YouTube video
- * Used for duplicate prevention - checks for any non-expired record
+ * Return the unique record for a YouTube video regardless of processing state.
+ * Failed records must be reused because the schema has a unique video key.
  */
 export async function findExistingMediaAsset(videoId: string) {
-  return await prisma.mediaAsset.findFirst({
+  return await prisma.mediaAsset.findUnique({
     where: {
-      provider: "youtube",
-      providerTrackId: videoId,
-      // Accept any active status, including READY or failed that can be retried
-      status: { 
-        in: ["PENDING", "VALIDATING", "DOWNLOADING", "CONVERTING", "UPLOADING", "READY"]
-      },
+      provider_providerTrackId: { provider: "youtube", providerTrackId: videoId },
+    },
+  });
+}
+
+/** Requeue a previously failed/expired asset when a creator selects it again. */
+export async function requeueMediaAsset(id: string) {
+  return prisma.mediaAsset.updateMany({
+    where: { id, status: { in: ["FAILED", "EXPIRED"] } },
+    data: {
+      status: "PENDING",
+      attemptCount: 0,
+      nextAttemptAt: null,
+      error: null,
+      errorDetails: null,
+      processedAt: null,
+      expiresAt: null,
     },
   });
 }

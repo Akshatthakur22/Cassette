@@ -32,6 +32,7 @@ export async function GET(
         storageKey: true,
         processedAt: true,
         durationSec: true,
+        updatedAt: true,
       },
     });
 
@@ -40,6 +41,29 @@ export async function GET(
         { error: "Media asset not found" },
         { status: 404 }
       );
+    }
+
+    const inProgress = ["VALIDATING", "DOWNLOADING", "CONVERTING", "UPLOADING"].includes(asset.status);
+    const stale = asset.updatedAt.getTime() < Date.now() - 15 * 60 * 1000;
+    if (inProgress && stale) {
+      const recovered = await prisma.mediaAsset.updateMany({
+        where: {
+          id: mediaAssetId,
+          status: asset.status,
+          updatedAt: { lt: new Date(Date.now() - 15 * 60 * 1000) },
+        },
+        data: {
+          status: "FAILED",
+          error: "Processing stopped before this track was ready. Retry to continue.",
+          errorDetails: "Status request recovered a stale media job",
+          nextAttemptAt: new Date(),
+          attemptCount: { increment: 1 },
+        },
+      });
+      if (recovered.count > 0) {
+        asset.status = "FAILED";
+        asset.error = "Processing stopped before this track was ready. Retry to continue.";
+      }
     }
 
     // Calculate progress percentage based on status
@@ -56,17 +80,20 @@ export async function GET(
 
     const progress = progressMap[asset.status] || 0;
 
-    return NextResponse.json({
-      id: asset.id,
-      status: asset.status,
-      error: asset.error,
-      progress,
-      attemptCount: asset.attemptCount,
-      fileSize: asset.fileSize,
-      storageKey: asset.storageKey,
-      processedAt: asset.processedAt,
-      durationSec: asset.durationSec,
-    });
+    return NextResponse.json(
+      {
+        id: asset.id,
+        status: asset.status,
+        error: asset.error,
+        progress,
+        attemptCount: asset.attemptCount,
+        fileSize: asset.fileSize,
+        storageKey: asset.storageKey,
+        processedAt: asset.processedAt,
+        durationSec: asset.durationSec,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     console.error("[media-assets status] Error:", error);
     return NextResponse.json(

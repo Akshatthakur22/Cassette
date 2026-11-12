@@ -25,7 +25,6 @@ import { useWakeLock } from "@/app/lib/useWakeLock";
 import { MediaSessionInit } from "@/lib/playback/MediaSessionInit";
 import { getStableImageNumber } from "@/app/lib/accessibility";
 import { useMediaAssetStates } from "@/app/hooks/useMediaAssetStates";
-import { getEagerPreloadService } from "@/lib/playback/eager-preload";
 
 interface Props {
   tape: TapeWithTracks;
@@ -77,11 +76,11 @@ function EmptyScreen({ isPreview }: { isPreview: boolean }) {
 export default function TapeViewClient({ tape, isPreview = false }: Props) {
   const reduceMotion = useReduceMotion();
 
-  // Media asset states polling - DISABLED (polling disabled)
-  // Hook still called but with enabled=false, so it returns empty object
+  // Keep the tape index in sync with the background media-processing jobs.
   const mediaAssetStates = useMediaAssetStates({
-    tracks: tape.tracks as any,
-    enabled: false, // DO NOT ENABLE - causes continuous polling spam
+    tracks: tape.tracks,
+    enabled: true,
+    pollInterval: 3000,
   });
 
   // Gate + playback state
@@ -144,23 +143,6 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
         })
       );
 
-      // EAGER PRELOAD: Start loading all YouTube tracks immediately
-      // Use mediaAssetId if available (from new system), otherwise use providerTrackId
-      const youtubeMediaAssetIds = (tape.tracks as TrackRow[])
-        .filter((t) => (t as any).mediaAssetId || t.provider === "youtube")
-        .map((t) => {
-          // If we have mediaAssetId, use it (preferred)
-          if ((t as any).mediaAssetId) return (t as any).mediaAssetId;
-          // Otherwise use providerTrackId (YouTube video ID)
-          return (t as any).providerTrackId;
-        })
-        .filter(Boolean);
-
-      if (youtubeMediaAssetIds.length > 0) {
-        const eagerPreload = getEagerPreloadService();
-        eagerPreload.preloadAllTracks(youtubeMediaAssetIds);
-        console.debug(`[TapeViewClient] Started eager preload for ${youtubeMediaAssetIds.length} tracks`);
-      }
     }
   }, [tape.id, isPreview, tape.playlistSourceId, tape.playlistSourceUrl, tape.playlistName, tape.tracks]);
 
@@ -209,8 +191,11 @@ export default function TapeViewClient({ tape, isPreview = false }: Props) {
     title: t.title,
     artist: t.artist ?? "Unknown",
     thumbnailUrl: t.thumbnailUrl ?? "",
-    provider: (t.provider ?? "youtube") as "youtube" | "voice",
-    providerTrackId: t.provider === "voice" ? t.providerTrackId : extractVideoId(t.providerTrackId),
+    provider: (t.provider ?? "youtube") as "youtube" | "voice" | "media_asset",
+    providerTrackId:
+      t.provider === "voice" || t.provider === "media_asset"
+        ? (t.mediaAssetId ?? t.providerTrackId)
+        : extractVideoId(t.providerTrackId),
     personalNote: t.personalNote ?? undefined,
     durationSec: t.durationSec ?? 0,
   }));

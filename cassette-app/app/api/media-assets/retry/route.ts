@@ -20,7 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import { triggerMediaAssetProcessing } from "@/app/lib/media-asset";
+import { scheduleMediaAssetProcessing } from "@/app/lib/media-asset";
 
 export async function POST(request: NextRequest) {
   try {
@@ -104,31 +104,24 @@ export async function POST(request: NextRequest) {
         status: "PENDING",
         error: null,
         errorDetails: null,
-        // Keep attemptCount for exponential backoff
-        // nextAttemptAt is handled by worker based on attemptCount
+        nextAttemptAt: null,
       },
     });
 
     console.log(`[MEDIA_ASSETS_RETRY] Asset reset to PENDING: ${mediaAssetId}`);
 
     // Trigger worker immediately
-    const triggerResult = await triggerMediaAssetProcessing(mediaAssetId);
-
-    if (triggerResult) {
-      console.log(`[MEDIA_ASSETS_RETRY] Worker trigger successful: ${mediaAssetId}`);
-    } else {
-      console.warn(`[MEDIA_ASSETS_RETRY] Worker trigger failed (but asset was reset): ${mediaAssetId}`);
-    }
+    scheduleMediaAssetProcessing(mediaAssetId);
 
     return NextResponse.json(
       {
         success: true,
-        message: "Asset reset to PENDING status and worker triggered",
+        message: "Asset reset to PENDING status and worker scheduled",
         mediaAssetId: updatedAsset.id,
         newStatus: updatedAsset.status,
         title: updatedAsset.title,
         previousAttempts: mediaAsset.attemptCount,
-        workerTriggered: triggerResult,
+        workerScheduled: true,
       },
       { status: 200 }
     );
